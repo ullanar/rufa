@@ -5,8 +5,10 @@ pub mod drones;
 pub mod edit;
 pub mod graph;
 pub mod layout;
+pub mod mining;
 pub mod place;
 pub mod projection;
+pub mod repair;
 pub mod stats;
 
 pub use esf_dogma_engine::{
