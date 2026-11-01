@@ -15,6 +15,21 @@ pub mod category {
     pub const FIGHTER: i32 = 87;
 }
 
+pub mod group {
+    pub const SHIELD_BOOSTER: i32 = 40;
+    pub const REMOTE_SHIELD_BOOSTER: i32 = 41;
+    pub const ARMOR_REPAIR_UNIT: i32 = 62;
+    pub const HULL_REPAIR_UNIT: i32 = 63;
+    pub const REMOTE_CAPACITOR_TRANSMITTER: i32 = 67;
+    pub const REMOTE_ARMOR_REPAIRER: i32 = 325;
+    pub const REMOTE_HULL_REPAIRER: i32 = 585;
+    pub const ANCILLARY_SHIELD_BOOSTER: i32 = 1156;
+    pub const ANCILLARY_ARMOR_REPAIRER: i32 = 1199;
+    pub const ANCILLARY_REMOTE_SHIELD_BOOSTER: i32 = 1697;
+    pub const ANCILLARY_REMOTE_ARMOR_REPAIRER: i32 = 1698;
+    pub const MUTADAPTIVE_REMOTE_ARMOR_REPAIRER: i32 = 2018;
+}
+
 pub const MARKET_ROOTS: [i32; 9] = [9, 955, 157, 11, 24, 477, 2202, 2203, 4];
 
 #[derive(Debug, Clone)]
