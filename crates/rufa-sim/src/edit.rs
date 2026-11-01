@@ -113,6 +113,35 @@ pub fn add(
     Ok(fit.items.len() - 1)
 }
 
+/// Put a type in the cargo hold, whatever it is. A spare booster or a second
+/// set of implants rides along without touching a single number.
+pub fn add_to_cargo(fit: &mut Fit, type_id: i32) -> usize {
+    if let Some(i) = fit
+        .items
+        .iter()
+        .position(|it| it.slot == Slot::Cargo && it.type_id == type_id)
+    {
+        fit.items[i].quantity += 1;
+        return i;
+    }
+    fit.items
+        .push(new_item(type_id, Slot::Cargo, State::Offline));
+    fit.items.len() - 1
+}
+
+/// Take an item out of its slot and drop it in the hold, keeping the count.
+pub fn move_to_cargo(fit: &mut Fit, index: usize) -> Result<(), EditError> {
+    let item = fit.items.get(index).ok_or(EditError::NoSuchItem(index))?;
+    if item.slot == Slot::Cargo {
+        return Ok(());
+    }
+    let (type_id, quantity) = (item.type_id, item.quantity.max(1));
+    fit.items.remove(index);
+    let at = add_to_cargo(fit, type_id);
+    fit.items[at].quantity = fit.items[at].quantity.max(1) + quantity - 1;
+    Ok(())
+}
+
 pub fn remove(fit: &mut Fit, index: usize) -> Result<(), EditError> {
     if index >= fit.items.len() {
         return Err(EditError::NoSuchItem(index));

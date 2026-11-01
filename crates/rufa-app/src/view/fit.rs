@@ -1118,6 +1118,9 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         Message::CloseMenu,
     ));
     col = col.push(entry("Market Group".to_string(), Message::MenuMarketJump));
+    if item.slot != Slot::Cargo {
+        col = col.push(entry("Move To Cargo".to_string(), Message::MoveToCargo(i)));
+    }
     col = col.push(entry(
         if count > 1 {
             format!("Remove {count} items")
