@@ -285,6 +285,25 @@ pub fn pip(state: Pip) -> impl Fn(&Theme, button::Status) -> button::Style {
     }
 }
 
+/// One choice out of several. The segments sit inside a single frame, so the
+/// group reads as one control and never as a row of pills pushed together.
+pub fn segment(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| {
+        if selected {
+            flat(Some(ACCENT_WASH), ACCENT, None, 3.0)
+        } else {
+            match status {
+                button::Status::Hovered => flat(Some(OVERLAY), TEXT, None, 3.0),
+                _ => flat(None, MUTED, None, 3.0),
+            }
+        }
+    }
+}
+
+pub fn segment_frame(_theme: &Theme) -> container::Style {
+    boxed(SUNKEN, Some(EDGE), 4.0)
+}
+
 pub fn chip(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
         if selected {

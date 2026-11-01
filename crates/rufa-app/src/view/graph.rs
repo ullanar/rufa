@@ -14,19 +14,23 @@ pub fn view(app: &App) -> Element<'_, Message> {
     let Some(ids) = app.ids else {
         return text("No game data").into();
     };
-    let kind = |label: &'static str, which: GraphKind| {
-        button(text(label).size(ui::SMALL))
-            .padding(ui::pill(8.0))
-            .style(theme::chip(app.graph_kind == which))
-            .on_press(Message::GraphKind(which))
-    };
-    let kinds = row![
-        kind("DPS over distance", GraphKind::DpsOverDistance),
-        kind("Capacitor over time", GraphKind::CapOverTime),
-    ]
-    .spacing(ui::GAP);
+    let kinds = ui::segmented(
+        [
+            ("DPS over distance", GraphKind::DpsOverDistance),
+            ("Capacitor over time", GraphKind::CapOverTime),
+        ]
+        .into_iter()
+        .map(|(label, which)| {
+            (
+                label.to_string(),
+                app.graph_kind == which,
+                Message::GraphKind(which),
+            )
+        })
+        .collect(),
+    );
     if app.graph_kind == GraphKind::CapOverTime {
-        return cap_view(app, kinds.into());
+        return cap_view(app, kinds);
     }
     let target = app.graph_target();
     let mut reach: f64 = 0.0;

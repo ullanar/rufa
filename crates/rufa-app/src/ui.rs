@@ -38,6 +38,24 @@ pub fn pill(horizontal: f32) -> iced::Padding {
     }
 }
 
+/// A row of options where exactly one is picked. Pass the label, whether it is
+/// the current one, and the message that picks it.
+pub fn segmented<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
+    let mut line = row![].spacing(1).align_y(iced::Alignment::Center);
+    for (label, on, msg) in options {
+        line = line.push(
+            button(text(label).size(MICRO))
+                .padding(pill_tight(7.0))
+                .style(theme::segment(on))
+                .on_press(msg),
+        );
+    }
+    container(line)
+        .padding(1)
+        .style(theme::segment_frame)
+        .into()
+}
+
 /// A text field carries the same line box as a pill, so its caps also sit
 /// higher than the baseline gap below them.
 pub fn field(vertical: f32, horizontal: f32) -> iced::Padding {

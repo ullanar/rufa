@@ -256,33 +256,33 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
         .docs
         .get(app.active)
         .and_then(|doc| DamagePreset::of(&doc.doc.fit.environment.damage_profile));
-    let mut presets = row![ui::label("DAMAGE")]
-        .spacing(3)
-        .align_y(iced::Alignment::Center);
-    for preset in DamagePreset::ALL {
-        presets = presets.push(
-            button(text(preset.label()).size(ui::MICRO))
-                .padding(ui::pill_tight(6.0))
-                .style(theme::chip(current == Some(preset)))
-                .on_press(Message::DamageProfile(preset)),
-        );
-    }
+    let presets = row![
+        ui::label("DAMAGE"),
+        ui::segmented(
+            DamagePreset::ALL
+                .into_iter()
+                .map(|preset| (
+                    preset.label().to_string(),
+                    current == Some(preset),
+                    Message::DamageProfile(preset),
+                ))
+                .collect(),
+        ),
+    ]
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center);
     let head = |name: &'static str, color: Color| {
         ui::label(name)
             .color(color)
             .width(Length::Fill)
             .align_x(iced::alignment::Horizontal::Center)
     };
-    let unit = |label: &'static str, ehp: bool| {
-        button(text(label).size(ui::MICRO))
-            .padding(ui::pill_tight(6.0))
-            .style(theme::chip(app.show_ehp == ehp))
-            .on_press(Message::ShowEhp(ehp))
-    };
     let header = row![
-        row![unit("HP", false), unit("EHP", true)]
-            .spacing(2)
-            .width(72),
+        container(ui::segmented(vec![
+            ("HP".to_string(), !app.show_ehp, Message::ShowEhp(false)),
+            ("EHP".to_string(), app.show_ehp, Message::ShowEhp(true)),
+        ]))
+        .width(72),
         head("EM", theme::EM),
         head("TH", theme::THERMAL),
         head("KI", theme::KINETIC),

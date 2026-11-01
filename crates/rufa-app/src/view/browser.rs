@@ -464,17 +464,22 @@ fn market(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
         return ui::muted("No game data loaded").into();
     };
-    let mode = |label: &'static str, target: AddTo| {
-        button(text(label).size(ui::MICRO))
-            .padding(ui::pill_tight(7.0))
-            .style(theme::chip(app.add_to == target))
-            .on_press(Message::AddTo(target))
-    };
     let mut modes = row![
         ui::label("ADD TO"),
-        mode("fit", AddTo::Fit),
-        mode("cargo", AddTo::Cargo),
-        mode("projected", AddTo::Projected),
+        ui::segmented(
+            [
+                ("fit", AddTo::Fit),
+                ("cargo", AddTo::Cargo),
+                ("projected", AddTo::Projected),
+            ]
+            .into_iter()
+            .map(|(label, target)| (
+                label.to_string(),
+                app.add_to == target,
+                Message::AddTo(target),
+            ))
+            .collect(),
+        ),
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
