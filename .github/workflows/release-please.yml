@@ -25,10 +25,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+          PR_JSON: ${{ steps.rp.outputs.pr }}
         run: |
+          branch=$(printf '%s' "$PR_JSON" | jq -r .headBranchName)
           for workflow in validate.yml security.yml ci.yml; do
-            gh workflow run "$workflow" --repo "$REPO" --ref "$PR"
+            gh workflow run "$workflow" --repo "$REPO" --ref "$branch"
           done
       - name: build the release binaries
         if: steps.rp.outputs.release_created == 'true'
