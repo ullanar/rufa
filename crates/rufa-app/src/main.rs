@@ -217,6 +217,7 @@ pub enum Message {
     QuantityInput(usize, String),
     QuantityDone,
     PickForRack(Option<rufa_sim::place::Rack>),
+    ToggleStatSection(&'static str),
     ProjectItem(i32),
     ProjectFit(usize),
     Environment(EnvChoice),
@@ -346,6 +347,7 @@ pub struct App {
     pub add_to: AddTo,
     pub quantity_edit: Option<(usize, String)>,
     pub market_rack: Option<rufa_sim::place::Rack>,
+    pub stats_folded: std::collections::BTreeSet<&'static str>,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -436,6 +438,7 @@ impl App {
             add_to: AddTo::Fit,
             quantity_edit: None,
             market_rack: None,
+            stats_folded: std::collections::BTreeSet::new(),
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -965,6 +968,11 @@ impl App {
                 self.quantity_edit = Some((i, digits));
             }
             Message::QuantityDone => self.quantity_edit = None,
+            Message::ToggleStatSection(name) => {
+                if !self.stats_folded.remove(name) {
+                    self.stats_folded.insert(name);
+                }
+            }
             Message::PickForRack(rack) => {
                 self.market_rack = rack;
                 if rack.is_some() {
@@ -2705,6 +2713,23 @@ mod tests {
 
         let _ = app.update(Message::PickForRack(None));
         assert_eq!(app.market_rack, None);
+        let _ = app.view();
+    }
+
+    #[test]
+    fn a_stat_section_folds_and_keeps_its_headline() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let _ = app.update(Message::NewFit(rifter));
+        assert!(app.stats_folded.is_empty());
+        let _ = app.view();
+
+        let _ = app.update(Message::ToggleStatSection("Defense"));
+        assert!(app.stats_folded.contains("Defense"));
+        let _ = app.view();
+
+        let _ = app.update(Message::ToggleStatSection("Defense"));
+        assert!(!app.stats_folded.contains("Defense"));
         let _ = app.view();
     }
 
