@@ -3,11 +3,18 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: release tag to build, like v1.2.3
+        required: true
+        type: string
 
 permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -39,6 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.tag || github.ref }}
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: nightly
@@ -68,7 +76,6 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           ARCHIVE: ${{ matrix.archive }}
-          TAG: ${{ github.ref_name }}
         run: |
           name="rufa-$TAG-$TARGET"
           mkdir -p "dist/$name"
@@ -104,8 +111,6 @@ jobs:
       - name: upload assets and publish
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           gh release upload "$TAG" dist/* --repo "$REPO" --clobber
-          gh release edit "$TAG" --repo "$REPO" --draft=false

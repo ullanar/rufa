@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+  workflow_dispatch:
 
 permissions: {}
 
@@ -10,6 +11,31 @@ env:
   RUFA_DATA_DIR: ${{ github.workspace }}/.sde
 
 jobs:
+  changes:
+    name: changed files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE" ]; then
+            BASE=$(git merge-base origin/master HEAD)
+          fi
+          if git diff --name-only "$BASE" HEAD | grep -vqE '(\.md$|^LICENSE$|^docs/|^\.gitignore$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   commits:
     name: conventional commits
     runs-on: ubuntu-latest
@@ -20,11 +46,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: every commit of the pull request
-        env:
+      - env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
+          if [ -z "$BASE" ]; then
+            BASE=$(git merge-base origin/master HEAD)
+          fi
           pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?: .+'
           status=0
           while IFS= read -r subject; do
@@ -34,11 +61,13 @@ jobs:
               echo "bad  $subject"
               status=1
             fi
-          done < <(git log --format=%s "$BASE".."$HEAD")
+          done < <(git log --format=%s "$BASE"..HEAD)
           exit "$status"
 
   check:
     name: fmt, clippy, tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
