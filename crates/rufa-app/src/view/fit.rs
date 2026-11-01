@@ -1,5 +1,5 @@
 use iced::widget::{
-    button, column, container, image, mouse_area, pick_list, row, scrollable, space, text,
+    button, column, container, image, mouse_area, pick_list, row, scrollable, space, text, tooltip,
 };
 use iced::{Color, Length};
 use rufa_data::icons::Kind;
@@ -498,10 +498,23 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
         rail
     };
 
-    let glyph = mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
-        .on_press(Message::CycleState(i))
-        .on_right_press(Message::ToggleOverload(i))
-        .on_middle_press(Message::ToggleOffline(i));
+    let glyph = tooltip(
+        mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
+            .on_press(Message::CycleState(i))
+            .on_right_press(Message::ToggleOverload(i))
+            .on_middle_press(Message::ToggleOffline(i)),
+        container(
+            text(format!(
+                "{}  ·  click: online / active, right: overheat, middle: offline",
+                state_name(state)
+            ))
+            .size(ui::SMALL),
+        )
+        .padding([4, 8])
+        .style(theme::tooltip),
+        tooltip::Position::Right,
+    )
+    .delay(std::time::Duration::from_millis(400));
 
     let icon: El<'a> = match app.icon(Kind::Icon, item.type_id) {
         Some(handle) => image(handle).width(18).height(18).into(),
@@ -554,11 +567,22 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
             .padding([0, 4])
             .height(ui::ROW)
             .align_y(iced::Alignment::Center)
-            .style(theme::row(selected))
+            .style(theme::row(selected, app.hovered_item == Some(i)))
             .width(Length::Fill),
     )
     .on_press(Message::SelectItem(Some(i)))
+    .on_enter(Message::HoverItem(Some(i)))
+    .on_exit(Message::HoverItem(None))
     .into()
+}
+
+fn state_name(state: State) -> &'static str {
+    match state {
+        State::Offline => "Offline",
+        State::Online => "Online",
+        State::Active => "Active",
+        State::Overload => "Overloaded",
+    }
 }
 
 fn charge_cell<'a>(i: usize, charge: String) -> El<'a> {

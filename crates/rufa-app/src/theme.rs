@@ -153,13 +153,22 @@ pub fn rounded(color: Color, radius: f32) -> impl Fn(&Theme) -> container::Style
     move |_| boxed(color, None, radius)
 }
 
-pub fn row(selected: bool) -> impl Fn(&Theme) -> container::Style {
+pub fn row(selected: bool, hovered: bool) -> impl Fn(&Theme) -> container::Style {
     move |_| {
         if selected {
             boxed(ACCENT_WASH, None, 4.0)
+        } else if hovered {
+            boxed(RAISED, None, 4.0)
         } else {
             container::Style::default()
         }
+    }
+}
+
+pub fn tooltip(_theme: &Theme) -> container::Style {
+    container::Style {
+        text_color: Some(TEXT),
+        ..boxed(OVERLAY, Some(EDGE), 4.0)
     }
 }
 

@@ -149,6 +149,7 @@ pub enum Message {
     ToggleOffline(usize),
     RemoveItem(usize),
     SelectItem(Option<usize>),
+    HoverItem(Option<usize>),
     Quantity(usize, u32),
     LoadCharge(usize, Option<i32>),
     DamageProfile(DamagePreset),
@@ -226,6 +227,7 @@ pub struct App {
     pub market_group: Option<i32>,
     pub market_results: Vec<i32>,
     pub selected_item: Option<usize>,
+    pub hovered_item: Option<usize>,
     pub status: String,
     pub panes: pane_grid::State<Pane>,
     pub characters: Vec<Character>,
@@ -287,6 +289,7 @@ impl App {
             market_group: None,
             market_results: Vec::new(),
             selected_item: None,
+            hovered_item: None,
             status: String::new(),
             panes,
             characters,
@@ -820,6 +823,7 @@ impl App {
                 self.edit_active(|fit, _| edit::remove(fit, i));
             }
             Message::SelectItem(i) => self.selected_item = i,
+            Message::HoverItem(i) => self.hovered_item = i,
             Message::Quantity(i, q) => self.edit_active(|fit, _| edit::set_quantity(fit, i, q)),
             Message::SkillLevel(level) => {
                 return self.update(Message::ChooseCharacter(CharChoice::All(level)));
@@ -1306,6 +1310,9 @@ impl App {
             if let (Key::Named(keyboard::key::Named::Delete), Some(i)) = (&key, self.selected_item)
             {
                 return self.update(Message::RemoveItem(i));
+            }
+            if let Key::Named(keyboard::key::Named::Escape) = &key {
+                self.selected_item = None;
             }
             return Task::none();
         }
