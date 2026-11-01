@@ -150,6 +150,17 @@ pub enum Message {
     RemoveItem(usize),
     SelectItem(Option<usize>),
     HoverItem(Option<usize>),
+    OpenMenu(usize),
+    CloseMenu,
+    CursorMoved(iced::Point),
+    MenuCharge(Option<i32>),
+    MenuVariant(i32),
+    MenuState(State),
+    MenuRemove,
+    MenuRemoveSimilar,
+    MenuMarketJump,
+    MenuFill,
+    MenuMutate(i32),
     Quantity(usize, u32),
     LoadCharge(usize, Option<i32>),
     DamageProfile(DamagePreset),
@@ -227,6 +238,11 @@ pub struct App {
     pub market_group: Option<i32>,
     pub market_results: Vec<i32>,
     pub selected_item: Option<usize>,
+    pub selected: std::collections::BTreeSet<usize>,
+    pub anchor: Option<usize>,
+    pub modifiers: Modifiers,
+    pub cursor: iced::Point,
+    pub menu: Option<(usize, iced::Point)>,
     pub hovered_item: Option<usize>,
     pub status: String,
     pub panes: pane_grid::State<Pane>,
@@ -289,6 +305,11 @@ impl App {
             market_group: None,
             market_results: Vec::new(),
             selected_item: None,
+            selected: Default::default(),
+            anchor: None,
+            modifiers: Modifiers::empty(),
+            cursor: iced::Point::ORIGIN,
+            menu: None,
             hovered_item: None,
             status: String::new(),
             panes,
@@ -336,7 +357,11 @@ impl App {
 
     fn open_args(&mut self) {
         for arg in std::env::args_os().skip(1) {
-            if arg == "--market" {
+            if arg == "--menu" {
+                self.selected.insert(0);
+                self.selected_item = Some(0);
+                self.menu = Some((0, iced::Point::new(120.0, 160.0)));
+            } else if arg == "--market" {
                 self.left = LeftTab::Market;
             } else if arg == "--skills" {
                 self.left = LeftTab::Character;
@@ -822,7 +847,155 @@ impl App {
                 self.selected_item = None;
                 self.edit_active(|fit, _| edit::remove(fit, i));
             }
-            Message::SelectItem(i) => self.selected_item = i,
+            Message::SelectItem(i) => {
+                self.menu = None;
+                match i {
+                    None => {
+                        self.selected_item = None;
+                        self.selected.clear();
+                    }
+                    Some(i) if self.modifiers.control() => {
+                        if !self.selected.remove(&i) {
+                            self.selected.insert(i);
+                        }
+                        self.selected_item = Some(i);
+                        self.anchor = Some(i);
+                    }
+                    Some(i) if self.modifiers.shift() => {
+                        let from = self.anchor.unwrap_or(i);
+                        self.selected.extend(from.min(i)..=from.max(i));
+                        self.selected_item = Some(i);
+                    }
+                    Some(i) => {
+                        self.selected.clear();
+                        self.selected.insert(i);
+                        self.selected_item = Some(i);
+                        self.anchor = Some(i);
+                    }
+                }
+            }
+            Message::OpenMenu(i) => {
+                if !self.selected.contains(&i) {
+                    self.selected.clear();
+                    self.selected.insert(i);
+                    self.selected_item = Some(i);
+                    self.anchor = Some(i);
+                }
+                self.menu = Some((i, self.cursor));
+            }
+            Message::CloseMenu => self.menu = None,
+            Message::CursorMoved(p) => self.cursor = p,
+            Message::MenuCharge(charge) => {
+                let targets = self.menu_targets(true);
+                self.menu = None;
+                self.edit_active(|fit, _| {
+                    for i in targets {
+                        edit::set_charge(fit, i, charge)?;
+                    }
+                    Ok(())
+                });
+            }
+            Message::MenuVariant(type_id) => {
+                let targets = self.menu_targets(true);
+                self.menu = None;
+                self.edit_active(|fit, _| {
+                    for i in targets {
+                        if let Some(item) = fit.items.get_mut(i) {
+                            item.type_id = type_id;
+                            item.mutation = None;
+                        }
+                    }
+                    Ok(())
+                });
+            }
+            Message::MenuState(state) => {
+                let targets = self.menu_targets(false);
+                self.menu = None;
+                self.edit_active(|fit, _| {
+                    for i in targets {
+                        edit::set_state(fit, i, state)?;
+                    }
+                    Ok(())
+                });
+            }
+            Message::MenuRemoveSimilar => {
+                let Some((i, _)) = self.menu else {
+                    return Task::none();
+                };
+                self.menu = None;
+                self.selected.clear();
+                self.selected_item = None;
+                self.edit_active(|fit, _| {
+                    let Some(type_id) = fit.items.get(i).map(|it| it.type_id) else {
+                        return Ok(());
+                    };
+                    fit.items.retain(|it| it.type_id != type_id);
+                    Ok(())
+                });
+            }
+            Message::MenuMarketJump => {
+                if let (Some((i, _)), Ok(game)) = (self.menu, &self.game)
+                    && let Some(doc) = self.docs.get(self.active)
+                    && let Some(item) = doc.doc.fit.items.get(i)
+                    && let Some(ty) = game.sde.get_type(item.type_id)
+                    && ty.market_group_id() != 0
+                {
+                    self.left = LeftTab::Market;
+                    self.market_search.clear();
+                    self.market_results.clear();
+                    self.market_group = Some(ty.market_group_id());
+                }
+                self.menu = None;
+            }
+            Message::MenuFill => {
+                let Some((i, _)) = self.menu else {
+                    return Task::none();
+                };
+                self.menu = None;
+                if let Some((game, ids)) = self.ready() {
+                    self.edit_active(|fit, layout| {
+                        let Some(item) = fit.items.get(i).cloned() else {
+                            return Ok(());
+                        };
+                        let Some((rack, _)) = rufa_sim::place::Rack::of_slot(item.slot) else {
+                            return Ok(());
+                        };
+                        let charge = item.charge.as_ref().map(|c| c.type_id);
+                        while edit::free_index(fit, rack, layout.count(rack)).is_some() {
+                            let index =
+                                edit::add_checked(fit, &game.info(), &ids, layout, item.type_id)?;
+                            fit.items[index].state = item.state;
+                            edit::set_charge(fit, index, charge)?;
+                        }
+                        Ok(())
+                    });
+                }
+            }
+            Message::MenuMutate(plasmid) => {
+                let targets = self.menu_targets(true);
+                self.menu = None;
+                if let Some((game, _)) = self.ready() {
+                    self.edit_active(|fit, _| {
+                        for i in targets {
+                            edit::mutate(fit, &game.sde, &game.info(), i, plasmid)?;
+                        }
+                        Ok(())
+                    });
+                }
+            }
+            Message::MenuRemove => {
+                let mut targets = self.menu_targets(false);
+                self.menu = None;
+                targets.sort_unstable_by(|a, b| b.cmp(a));
+                self.selected.clear();
+                self.selected_item = None;
+                self.edit_active(|fit, _| {
+                    for i in targets {
+                        edit::remove(fit, i)?;
+                    }
+                    Ok(())
+                });
+            }
             Message::HoverItem(i) => self.hovered_item = i,
             Message::Quantity(i, q) => self.edit_active(|fit, _| edit::set_quantity(fit, i, q)),
             Message::SkillLevel(level) => {
@@ -1250,6 +1423,28 @@ impl App {
         }
     }
 
+    fn menu_targets(&self, modules_only: bool) -> Vec<usize> {
+        let Some(doc) = self.docs.get(self.active) else {
+            return Vec::new();
+        };
+        let mut targets: Vec<usize> = self
+            .selected
+            .iter()
+            .copied()
+            .filter(|i| *i < doc.doc.fit.items.len())
+            .collect();
+        if targets.is_empty()
+            && let Some((i, _)) = self.menu
+        {
+            targets.push(i);
+        }
+        if modules_only {
+            targets
+                .retain(|i| rufa_sim::place::Rack::of_slot(doc.doc.fit.items[*i].slot).is_some());
+        }
+        targets
+    }
+
     pub fn graph_target(&self) -> rufa_sim::graph::Target {
         let signature = self
             .graph_signature
@@ -1303,6 +1498,11 @@ impl App {
     }
 
     fn on_key(&mut self, event: keyboard::Event) -> Task<Message> {
+        match &event {
+            keyboard::Event::ModifiersChanged(m) => self.modifiers = *m,
+            keyboard::Event::KeyPressed { modifiers, .. }
+            | keyboard::Event::KeyReleased { modifiers, .. } => self.modifiers = *modifiers,
+        }
         let keyboard::Event::KeyPressed { key, modifiers, .. } = event else {
             return Task::none();
         };
@@ -1313,6 +1513,8 @@ impl App {
             }
             if let Key::Named(keyboard::key::Named::Escape) = &key {
                 self.selected_item = None;
+                self.selected.clear();
+                self.menu = None;
             }
             return Task::none();
         }
@@ -1854,6 +2056,64 @@ mod tests {
             "over CPU is allowed, only shown: {}",
             app.status
         );
+    }
+
+    #[test]
+    fn selection_and_context_menu_apply_to_many() {
+        let Some(mut app) = app() else { return };
+        let kestrel = type_id(&app, "Kestrel");
+        let launcher = type_id(&app, "Rocket Launcher II");
+        let rocket = type_id(&app, "Caldari Navy Mjolnir Rocket");
+        let _ = app.update(Message::NewFit(kestrel));
+        for _ in 0..4 {
+            let _ = app.update(Message::AddItem(launcher));
+        }
+        let _ = app.update(Message::SelectItem(Some(0)));
+        app.modifiers = Modifiers::SHIFT;
+        let _ = app.update(Message::SelectItem(Some(2)));
+        app.modifiers = Modifiers::empty();
+        assert_eq!(app.selected.len(), 3);
+        let _ = app.update(Message::OpenMenu(1));
+        assert!(app.menu.is_some());
+        let _ = app.update(Message::MenuCharge(Some(rocket)));
+        assert!(app.menu.is_none());
+        let fit = &app.docs[0].doc.fit;
+        assert!(fit.items[0].charge.is_some() && fit.items[2].charge.is_some());
+        assert!(fit.items[3].charge.is_none());
+
+        app.modifiers = Modifiers::CTRL;
+        let _ = app.update(Message::SelectItem(Some(3)));
+        app.modifiers = Modifiers::empty();
+        assert_eq!(app.selected.len(), 4);
+        let _ = app.update(Message::OpenMenu(3));
+        let _ = app.update(Message::MenuState(State::Offline));
+        assert!(
+            app.docs[0]
+                .doc
+                .fit
+                .items
+                .iter()
+                .all(|it| it.state == State::Offline)
+        );
+        let _ = app.update(Message::OpenMenu(0));
+        let _ = app.update(Message::MenuRemove);
+        assert_eq!(app.docs[0].doc.fit.items.len(), 0);
+        assert!(app.selected.is_empty());
+
+        let _ = app.update(Message::AddItem(launcher));
+        let _ = app.update(Message::AddItem(rocket));
+        let _ = app.update(Message::OpenMenu(0));
+        let _ = app.update(Message::MenuFill);
+        let fit = &app.docs[0].doc.fit;
+        assert_eq!(fit.items.len(), 4, "fill clones into every free high slot");
+        assert!(fit.items.iter().all(|it| it.charge.is_some()));
+        let _ = app.update(Message::OpenMenu(2));
+        let _ = app.update(Message::MenuMarketJump);
+        assert_eq!(app.left, LeftTab::Market);
+        assert!(app.market_group.is_some());
+        let _ = app.update(Message::OpenMenu(1));
+        let _ = app.update(Message::MenuRemoveSimilar);
+        assert_eq!(app.docs[0].doc.fit.items.len(), 0);
     }
 
     #[test]
