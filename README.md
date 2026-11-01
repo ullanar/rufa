@@ -4,7 +4,7 @@
 
 > This project is fully vibe-coded. I don't have enough free time to write it by hand, so an AI does the typing and I do the thinking. It is here for fun and for the community. We still hold it to the practices of experienced developers: tests, clippy, pinned CI, no nonsense.
 
-The attribute math is EVEShipFit's `esf-dogma-engine`. Rufa wraps it in a desktop app and adds the rest: graphs, capacitor simulation, projections, prices, characters from ESI, saved fits.
+The attribute math is [dogma-engine](https://github.com/EVEShipFit/dogma-engine) by [TrueBrain](https://github.com/TrueBrain), the author of [EVEShipFit](https://github.com/EVEShipFit). Thank you for the engine and the patched SDE; none of this would exist without them. Rufa wraps the engine in a desktop app and adds the rest: graphs, capacitor simulation, projections, prices, characters from ESI, saved fits.
 
 ## Run
 
@@ -12,7 +12,7 @@ The attribute math is EVEShipFit's `esf-dogma-engine`. Rufa wraps it in a deskto
 cargo run --release
 ```
 
-The first start downloads the game data from the latest `sde-patched` release. Drop a fit file on the command line to open it:
+The first start downloads the game data from the latest [sde-patched](https://github.com/EVEShipFit/sde-patched) release. Drop a fit file on the command line to open it:
 
 ```
 cargo run --release -- my-fit.eft
@@ -28,4 +28,4 @@ Fits are esf/1 text files under `$XDG_CONFIG_HOME/rufa/fits`. Game data lives in
 
 ## License
 
-MIT. Game data belongs to CCP and ships under their license with `sde-patched`.
+MIT. Game data belongs to Fendris Creations and ships under their license with [sde-patched](https://github.com/EVEShipFit/sde-patched).
