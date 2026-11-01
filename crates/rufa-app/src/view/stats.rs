@@ -76,7 +76,8 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         ),
         ui::section(
             "Price",
-            app.fit_price(doc).map(|v| format!("{} ISK", fmt::short(v))),
+            app.fit_price(doc)
+                .map(|price| format!("{} ISK", fmt::short(price.hull))),
             price(app, doc, narrow),
         ),
     ]);
@@ -239,7 +240,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
     for preset in DamagePreset::ALL {
         presets = presets.push(
             button(text(preset.label()).size(ui::MICRO))
-                .padding([1, 6])
+                .padding(ui::pill_tight(6.0))
                 .style(theme::chip(current == Some(preset)))
                 .on_press(Message::DamageProfile(preset)),
         );
@@ -720,7 +721,8 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     let hull = app.prices.get(fit.ship.type_id);
     let mut modules = 0.0;
     let mut drones = 0.0;
-    let mut other = 0.0;
+    let mut head = 0.0;
+    let mut cargo = 0.0;
     for item in &fit.items {
         let price = app.prices.get(item.type_id).unwrap_or(0.0) * item.quantity as f64
             + item
@@ -732,8 +734,9 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             rufa_sim::Slot::DroneBay
             | rufa_sim::Slot::FighterTube(_)
             | rufa_sim::Slot::FighterBay => drones += price,
+            rufa_sim::Slot::Implant(_) | rufa_sim::Slot::Booster(_) => head += price,
             slot if rufa_sim::place::Rack::of_slot(slot).is_some() => modules += price,
-            _ => other += price,
+            _ => cargo += price,
         }
     }
     let status = if app.prices_pending {
@@ -745,7 +748,9 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         ui::stat_row(narrow, "Hull", isk(hull)),
         ui::stat_row(narrow, "Modules and charges", isk(Some(modules))),
         ui::stat_row(narrow, "Drones and fighters", isk(Some(drones))),
-        ui::stat_row(narrow, "Implants and cargo", isk(Some(other))),
+        ui::stat_row(narrow, "Cargo", isk(Some(cargo))),
+        ui::rule(),
+        ui::stat_row(narrow, "In the head", isk(Some(head))),
         row![
             text(status)
                 .size(ui::MICRO)
@@ -777,7 +782,7 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
             for v in variants {
                 line = line.push(
                     button(text(&v.name).size(ui::MICRO))
-                        .padding([1, 5])
+                        .padding(ui::pill_tight(5.0))
                         .style(theme::chip(v.id == item.type_id))
                         .on_press(Message::ReplaceItem(i, v.id)),
                 );
@@ -803,7 +808,7 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
                 let loaded = item.charge.as_ref().is_some_and(|c| c.type_id == charge.id);
                 charges = charges.push(
                     button(text(&charge.name).size(ui::MICRO))
-                        .padding([1, 5])
+                        .padding(ui::pill_tight(5.0))
                         .style(theme::chip(loaded))
                         .on_press(Message::LoadCharge(i, Some(charge.id))),
                 );
@@ -812,7 +817,7 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
         if any {
             charges = charges.push(
                 button(text("none").size(ui::MICRO))
-                    .padding([1, 5])
+                    .padding(ui::pill_tight(5.0))
                     .style(theme::ghost)
                     .on_press(Message::LoadCharge(i, None)),
             );
@@ -902,7 +907,7 @@ fn mutation_controls<'a>(
             .to_string();
         line = line.push(
             button(text(name).size(ui::MICRO))
-                .padding([1, 5])
+                .padding(ui::pill_tight(5.0))
                 .style(theme::chip(false))
                 .on_press(Message::Mutate(i, *p)),
         );
@@ -913,7 +918,7 @@ fn mutation_controls<'a>(
     };
     col = col.push(
         button(text("Revert mutation").size(ui::MICRO))
-            .padding([1, 6])
+            .padding(ui::pill_tight(6.0))
             .style(theme::danger)
             .on_press(Message::RevertMutation(i)),
     );
@@ -1005,7 +1010,7 @@ fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: u
                 if on { theme::danger } else { theme::secondary };
             line = line.push(
                 button(text(name).size(ui::MICRO))
-                    .padding([1, 5])
+                    .padding(ui::pill_tight(5.0))
                     .style(style)
                     .on_press(Message::ToggleSideEffect(i, effect)),
             );
@@ -1023,7 +1028,7 @@ fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: u
             let on = edit::ability_on(&info, &doc.doc.fit, i, effect);
             line = line.push(
                 button(text(name).size(ui::MICRO))
-                    .padding([1, 5])
+                    .padding(ui::pill_tight(5.0))
                     .style(theme::chip(on))
                     .on_press(Message::ToggleAbility(i, effect)),
             );

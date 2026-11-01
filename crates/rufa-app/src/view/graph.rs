@@ -16,7 +16,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     };
     let kind = |label: &'static str, which: GraphKind| {
         button(text(label).size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(8.0))
             .style(theme::chip(app.graph_kind == which))
             .on_press(Message::GraphKind(which))
     };
@@ -68,7 +68,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     for (i, p) in app.targets.iter().enumerate() {
         profiles = profiles.push(
             button(text(&p.name).size(ui::MICRO))
-                .padding([1, 6])
+                .padding(ui::pill_tight(6.0))
                 .style(theme::chip(app.target == i))
                 .on_press(Message::TargetProfile(i)),
         );
@@ -86,7 +86,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         text_input("name", &app.target_name)
             .on_input(Message::TargetName)
             .size(ui::SMALL)
-            .padding([3, 6])
+            .padding(ui::field(3.0, 6.0))
             .width(120)
             .style(theme::input),
     ]
@@ -99,7 +99,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 text_input("0%", &app.target_resists[i])
                     .on_input(move |s| Message::TargetResist(i, s))
                     .size(ui::SMALL)
-                    .padding([3, 6])
+                    .padding(ui::field(3.0, 6.0))
                     .width(46)
                     .style(theme::input),
             ]
@@ -119,7 +119,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             text_input("inf", &app.graph_signature)
                 .on_input(Message::GraphSignature)
                 .size(ui::SMALL)
-                .padding([3, 6])
+                .padding(ui::field(3.0, 6.0))
                 .width(70)
                 .style(theme::input),
         ]
@@ -130,7 +130,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             text_input("0", &app.graph_velocity)
                 .on_input(Message::GraphVelocity)
                 .size(ui::SMALL)
-                .padding([3, 6])
+                .padding(ui::field(3.0, 6.0))
                 .width(70)
                 .style(theme::input),
         ]
@@ -292,9 +292,10 @@ impl canvas::Program<Message> for Plot {
             });
         }
 
+        let baseline = plot.y + plot.height;
         for (i, (_, curve)) in self.series.iter().enumerate() {
             let color = COLORS[i % COLORS.len()];
-            let path = Path::new(|b| {
+            let line = Path::new(|b| {
                 for (n, (d, dps)) in curve.points.iter().enumerate() {
                     let p = to_point(*d, *dps);
                     if n == 0 {
@@ -304,7 +305,18 @@ impl canvas::Program<Message> for Plot {
                     }
                 }
             });
-            frame.stroke(&path, Stroke::default().with_color(color).with_width(2.0));
+            if let (Some(first), Some(last)) = (curve.points.first(), curve.points.last()) {
+                let area = Path::new(|b| {
+                    b.move_to(Point::new(to_point(first.0, 0.0).x, baseline));
+                    for (d, dps) in &curve.points {
+                        b.line_to(to_point(*d, *dps));
+                    }
+                    b.line_to(Point::new(to_point(last.0, 0.0).x, baseline));
+                    b.close();
+                });
+                frame.fill(&area, Color { a: 0.12, ..color });
+            }
+            frame.stroke(&line, Stroke::default().with_color(color).with_width(2.0));
         }
         vec![frame.into_geometry()]
     }

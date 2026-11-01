@@ -17,7 +17,7 @@ use rufa_sim::attrs::AttrIds;
 use rufa_sim::document::Document;
 use rufa_sim::drones;
 use rufa_sim::projection::Projected;
-use rufa_sim::{Fit, State, edit};
+use rufa_sim::{Fit, Slot, State, edit};
 use rufa_store::{Character, ImplantSet, PriceCache, SavedFit, Settings, TargetProfile};
 
 const MIN_WINDOW: (f32, f32) = (900.0, 600.0);
@@ -281,6 +281,13 @@ pub enum Message {
     SaveImplantSet,
     DeleteImplantSet(usize),
     Nothing,
+}
+
+/// Two sums, because a lost ship takes one of them and leaves the other.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Price {
+    pub hull: f64,
+    pub head: f64,
 }
 
 pub struct Doc {
@@ -647,10 +654,11 @@ impl App {
         }
     }
 
-    fn open_fit(&mut self, fit: Fit, path: Option<PathBuf>) {
+    fn open_fit(&mut self, mut fit: Fit, path: Option<PathBuf>) {
         let Some((game, ids)) = self.ready() else {
             return;
         };
+        rufa_sim::place::wake_the_head(&mut fit);
         let doc = Document::new(&game.info(), &ids, fit);
         self.status = format!(
             "Calculated in {:.2} ms",
@@ -737,15 +745,24 @@ impl App {
         )
     }
 
-    pub fn fit_price(&self, doc: &Doc) -> Option<f64> {
-        let mut total = self.prices.get(doc.doc.fit.ship.type_id)?;
+    /// What the fit costs, with the pilot's implants and boosters counted
+    /// apart: they stay in the head when the ship is lost.
+    pub fn fit_price(&self, doc: &Doc) -> Option<Price> {
+        let mut price = Price {
+            hull: self.prices.get(doc.doc.fit.ship.type_id)?,
+            head: 0.0,
+        };
         for item in &doc.doc.fit.items {
-            total += self.prices.get(item.type_id).unwrap_or(0.0) * item.quantity as f64;
+            let mut cost = self.prices.get(item.type_id).unwrap_or(0.0) * item.quantity as f64;
             if let Some(charge) = &item.charge {
-                total += self.prices.get(charge.type_id).unwrap_or(0.0);
+                cost += self.prices.get(charge.type_id).unwrap_or(0.0);
+            }
+            match item.slot {
+                Slot::Implant(_) | Slot::Booster(_) => price.head += cost,
+                _ => price.hull += cost,
             }
         }
-        Some(total)
+        Some(price)
     }
 
     fn edit_active(
@@ -2750,7 +2767,9 @@ mod tests {
         prices.insert(emp, 100.0);
         let _ = app.update(Message::PricesFetched(Ok(prices)));
         assert!(!app.prices_pending);
-        assert_eq!(app.fit_price(&app.docs[0]), Some(1_500_100.0));
+        let price = app.fit_price(&app.docs[0]).unwrap();
+        assert_eq!(price.hull, 1_500_100.0);
+        assert_eq!(price.head, 0.0);
         assert!(app.stale_price_types().is_empty());
         let reloaded = PriceCache::load(&app.config_dir);
         assert_eq!(reloaded.get(ac), Some(500_000.0));

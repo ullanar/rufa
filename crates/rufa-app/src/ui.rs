@@ -24,6 +24,40 @@ pub const GAP_ROW: f32 = 6.0;
 pub const PAD: f32 = 8.0;
 pub const SECTION_GAP: f32 = 6.0;
 
+/// A pill's text sits on its cap height, and the line box keeps room for
+/// descenders below the baseline. Symmetric padding therefore reads as two
+/// pixels of extra space under the word, so the top carries one more.
+pub fn pill(horizontal: f32) -> iced::Padding {
+    iced::Padding {
+        top: 3.0,
+        right: horizontal,
+        bottom: 2.0,
+        left: horizontal,
+    }
+}
+
+/// A text field carries the same line box as a pill, so its caps also sit
+/// higher than the baseline gap below them.
+pub fn field(vertical: f32, horizontal: f32) -> iced::Padding {
+    iced::Padding {
+        top: vertical + 1.0,
+        right: horizontal,
+        bottom: vertical - 1.0,
+        left: horizontal,
+    }
+}
+
+/// The same for a pill one step smaller, where the line box leaves even more
+/// room under the baseline.
+pub fn pill_tight(horizontal: f32) -> iced::Padding {
+    iced::Padding {
+        top: 2.0,
+        right: horizontal,
+        bottom: 0.0,
+        left: horizontal,
+    }
+}
+
 pub type El<'a> = Element<'a, Message>;
 
 pub fn label<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
