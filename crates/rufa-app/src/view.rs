@@ -148,6 +148,21 @@ fn status_bar(app: &App) -> El<'_> {
     if app.prices_pending {
         bar = bar.push(ui::label("prices"));
     }
+    let scale = app.settings.ui_scale;
+    bar = bar.push(ui::label("ZOOM"));
+    bar = bar.push(
+        button(text("−").size(ui::SMALL))
+            .padding([1, 7])
+            .style(theme::ghost)
+            .on_press(Message::UiScale(scale - 0.1)),
+    );
+    bar = bar.push(ui::small(format!("{:.0}%", scale * 100.0)));
+    bar = bar.push(
+        button(text("+").size(ui::SMALL))
+            .padding([1, 7])
+            .style(theme::ghost)
+            .on_press(Message::UiScale(scale + 0.1)),
+    );
     if let Some(tag) = &app.sde_update {
         bar = bar.push(
             button(text(format!("Update game data to {tag}")).size(ui::SMALL))

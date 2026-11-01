@@ -1,5 +1,5 @@
 use iced::Length;
-use iced::widget::{button, column, container, row, scrollable, text, text_input};
+use iced::widget::{button, column, container, row, text, text_input};
 use rufa_data::catalog::MARKET_ROOTS;
 
 use crate::theme;
@@ -148,11 +148,9 @@ fn ships(app: &App) -> El<'_> {
 
     column![
         search("Search hulls", &app.ship_search, Message::ShipSearch),
-        scrollable(list)
-            .style(theme::scroll)
-            .height(Length::FillPortion(3)),
+        ui::scroll(list).height(Length::FillPortion(3)),
         ui::rule(),
-        container(scrollable(saved).style(theme::scroll)).height(Length::FillPortion(2)),
+        container(ui::scroll(saved)).height(Length::FillPortion(2)),
     ]
     .spacing(ui::GAP_ROW)
     .into()
@@ -233,13 +231,12 @@ fn market(app: &App) -> El<'_> {
     column![
         search("Search items", &app.market_search, Message::MarketSearch),
         modes,
-        scrollable(container(list).padding(iced::Padding {
+        ui::scroll(container(list).padding(iced::Padding {
             top: 0.0,
             right: 14.0,
             bottom: 0.0,
             left: 0.0
         }))
-        .style(theme::scroll)
         .height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
@@ -392,7 +389,7 @@ fn character(app: &App) -> El<'_> {
         esi,
         header,
         bulk,
-        scrollable(list).style(theme::scroll).height(Length::Fill)
+        ui::scroll(list).height(Length::Fill)
     ]
     .spacing(ui::GAP_ROW)
     .into()

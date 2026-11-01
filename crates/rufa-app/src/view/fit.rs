@@ -1,3 +1,4 @@
+use iced::widget::responsive;
 use iced::widget::{
     button, column, container, image, mouse_area, pick_list, pin, row, scrollable, space, stack,
     text, tooltip,
@@ -35,27 +36,28 @@ pub fn view(app: &App) -> El<'_> {
         );
     }
     let body: El<'_> = match app.docs.get(app.active) {
-        Some(doc) => {
-            let list = mouse_area(
-                scrollable(slots(app, doc))
-                    .style(theme::scroll)
-                    .height(Length::Fill),
-            )
-            .on_move(Message::CursorMoved);
+        Some(doc) => responsive(move |size| {
+            let compact = size.width < 700.0;
+            let list = mouse_area(ui::scroll(slots(app, doc, compact)).height(Length::Fill))
+                .on_move(Message::CursorMoved);
             let mut layers: Vec<El<'_>> = vec![list.into()];
             if let Some((i, at)) = app.menu
                 && i < doc.doc.fit.items.len()
             {
+                let width = 360.0f32.min(size.width - 16.0);
+                let x = at.x.min((size.width - width - 8.0).max(0.0));
+                let y = at.y.min((size.height - 60.0).max(0.0));
                 layers.push(
                     mouse_area(space().width(Length::Fill).height(Length::Fill))
                         .on_press(Message::CloseMenu)
                         .on_right_press(Message::CloseMenu)
                         .into(),
                 );
+                let max_height = (size.height - y - 8.0).max(120.0);
                 layers.push(
-                    pin(context_menu(app, doc, i))
-                        .x(at.x.min(400.0))
-                        .y(at.y)
+                    pin(container(context_menu(app, doc, i, width)).max_height(max_height))
+                        .x(x)
+                        .y(y)
                         .into(),
                 );
             }
@@ -66,7 +68,8 @@ pub fn view(app: &App) -> El<'_> {
             .spacing(ui::GAP_ROW)
             .height(Length::Fill)
             .into()
-        }
+        })
+        .into(),
         None => container(
             column![
                 text("No fit open")
@@ -213,7 +216,7 @@ fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
 
 type SlotFilter = fn(Slot) -> bool;
 
-fn slots<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
+fn slots<'a>(app: &'a App, doc: &'a Doc, compact: bool) -> El<'a> {
     let fit = &doc.doc.fit;
     let layout = &doc.doc.layout;
     let mut col = column![].spacing(1).padding(iced::Padding {
@@ -268,7 +271,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         for index in 0..count.max(used as u8) {
             let slot = rack.slot(index);
             match fit.items.iter().position(|it| it.slot == slot) {
-                Some(i) => col = col.push(item_row(app, doc, i, rail_color(rack))),
+                Some(i) => col = col.push(item_row(app, doc, i, rail_color(rack), compact)),
                 None => {
                     col = col.push(empty_row(
                         format!("{} slot", rack.label()),
@@ -316,7 +319,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
             left: 2.0,
         }));
         for i in indexes {
-            col = col.push(item_row(app, doc, i, rail));
+            col = col.push(item_row(app, doc, i, rail, compact));
         }
     }
 
@@ -502,7 +505,7 @@ fn item_info(app: &App, doc: &Doc, i: usize) -> String {
     parts.join("  ·  ")
 }
 
-fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
+fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color, compact: bool) -> El<'a> {
     let item = &doc.doc.fit.items[i];
     let result = doc.doc.calc.items.get(i);
     let state = result.map(|r| r.state).unwrap_or(item.state);
@@ -548,19 +551,23 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
         container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
         glyph,
         icon,
-        text(ui::clip(&name, 40))
+        text(ui::clip(&name, if compact { 28 } else { 40 }))
             .size(ui::BODY)
             .font(theme::UI_MEDIUM)
             .color(theme::TEXT)
             .width(Length::Fill)
             .wrapping(text::Wrapping::None),
-        charge_cell(i, charge),
-        text(item_info(app, doc, i))
-            .size(ui::SMALL)
-            .color(theme::MUTED)
-            .width(190)
-            .wrapping(text::Wrapping::None)
-            .align_x(iced::alignment::Horizontal::Right),
+        charge_cell(i, charge, if compact { 90.0 } else { 150.0 }),
+        text(if compact {
+            String::new()
+        } else {
+            item_info(app, doc, i)
+        })
+        .size(ui::SMALL)
+        .color(theme::MUTED)
+        .width(if compact { 0.0 } else { 190.0 })
+        .wrapping(text::Wrapping::None)
+        .align_x(iced::alignment::Horizontal::Right),
     ]
     .spacing(ui::GAP_ROW)
     .align_y(iced::Alignment::Center);
@@ -604,7 +611,7 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
     .into()
 }
 
-fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize) -> El<'a> {
+fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> {
     let item = &doc.doc.fit.items[i];
     let name = app.type_name(item.type_id).to_string();
     let count = app.selected.len().max(1);
@@ -690,15 +697,25 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize) -> El<'a> {
             if variants.len() > 1 {
                 col = col.push(ui::rule());
                 col = col.push(ui::label("VARIATIONS"));
-                let mut line = row![].spacing(3);
-                for v in variants {
-                    line = line.push(chip(
-                        v.name.clone(),
-                        v.id == item.type_id,
-                        Message::MenuVariant(v.id),
-                    ));
+                for (label, ids) in meta_groups(game, variants) {
+                    col = col.push(text(label).size(ui::MICRO).color(theme::MUTED));
+                    for (id, vname) in ids {
+                        let on = id == item.type_id;
+                        col = col.push(
+                            button(
+                                text(vname)
+                                    .size(ui::SMALL)
+                                    .color(if on { theme::ACCENT } else { theme::TEXT })
+                                    .width(Length::Fill)
+                                    .wrapping(text::Wrapping::None),
+                            )
+                            .padding([2, 8])
+                            .width(Length::Fill)
+                            .style(theme::list_item(on))
+                            .on_press(Message::MenuVariant(id)),
+                        );
+                    }
                 }
-                col = col.push(line.wrap());
             }
         }
         let base = item
@@ -760,11 +777,42 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize) -> El<'a> {
     col = col.push(ui::rule());
     col = col.push(ui::label("STATE"));
     col = col.push(states);
-    container(col)
+    container(ui::scroll(col))
         .padding(ui::PAD)
-        .width(360)
+        .width(width)
         .style(theme::tooltip)
         .into()
+}
+
+fn meta_groups<'a>(
+    game: &'static rufa_data::Game,
+    variants: &'a [rufa_data::TypeRef],
+) -> Vec<(&'static str, Vec<(i32, &'a str)>)> {
+    let order: [(i32, &'static str); 7] = [
+        (1, "Tech I"),
+        (2, "Tech II"),
+        (3, "Storyline"),
+        (4, "Faction"),
+        (6, "Deadspace"),
+        (5, "Officer"),
+        (0, "Other"),
+    ];
+    let mut groups: Vec<(&'static str, Vec<(i32, &'a str)>)> =
+        order.iter().map(|(_, l)| (*l, Vec::new())).collect();
+    for v in variants {
+        let meta = game
+            .sde
+            .get_type(v.id)
+            .map(|t| t.meta_group_id())
+            .unwrap_or(0);
+        let slot = order
+            .iter()
+            .position(|(m, _)| *m == meta)
+            .unwrap_or(order.len() - 1);
+        groups[slot].1.push((v.id, v.name.as_str()));
+    }
+    groups.retain(|(_, list)| !list.is_empty());
+    groups
 }
 
 fn state_name(state: State) -> &'static str {
@@ -776,15 +824,15 @@ fn state_name(state: State) -> &'static str {
     }
 }
 
-fn charge_cell<'a>(i: usize, charge: String) -> El<'a> {
+fn charge_cell<'a>(i: usize, charge: String, width: f32) -> El<'a> {
     if charge.is_empty() {
-        return space().width(150).into();
+        return space().width(width).into();
     }
     mouse_area(
-        text(ui::clip(&charge, 26))
+        text(ui::clip(&charge, (width / 6.0) as usize))
             .size(ui::SMALL)
             .color(theme::TEXT_SECONDARY)
-            .width(150)
+            .width(width)
             .wrapping(text::Wrapping::None),
     )
     .on_right_press(Message::LoadCharge(i, None))

@@ -22,6 +22,7 @@ fn main() -> iced::Result {
         .theme(theme::of)
         .style(theme::root)
         .subscription(App::subscription)
+        .scale_factor(|app: &App| app.settings.ui_scale.clamp(0.75, 2.5))
         .window_size((1440.0, 900.0))
         .default_font(theme::UI)
         .antialiasing(true);
@@ -194,6 +195,7 @@ pub enum Message {
     Key(keyboard::Event),
     Downloaded(Result<String, String>),
     CenterTab(CenterTab),
+    UiScale(f32),
     GraphKind(GraphKind),
     GraphSignature(String),
     GraphVelocity(String),
@@ -1141,6 +1143,10 @@ impl App {
             }
             Message::Key(event) => return self.on_key(event),
             Message::CenterTab(tab) => self.center = tab,
+            Message::UiScale(scale) => {
+                self.settings.ui_scale = scale.clamp(0.75, 2.5);
+                let _ = self.settings.save(&self.config_dir);
+            }
             Message::GraphKind(kind) => self.graph_kind = kind,
             Message::GraphSignature(s) => self.graph_signature = s,
             Message::TargetProfile(i) => {

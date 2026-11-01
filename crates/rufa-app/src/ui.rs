@@ -1,24 +1,24 @@
 use iced::widget::canvas::{self, Frame, Path, Stroke};
-use iced::widget::{canvas as canvas_widget, column, container, row, space, text};
+use iced::widget::{canvas as canvas_widget, column, container, row, scrollable, space, text};
 use iced::{Color, Element, Length, Point, Rectangle, Renderer, Theme, mouse};
 use rufa_sim::State;
 
 use crate::Message;
 use crate::theme;
 
-pub const MICRO: f32 = 9.0;
-pub const LABEL: f32 = 10.0;
-pub const SMALL: f32 = 11.0;
-pub const BODY: f32 = 12.0;
-pub const VALUE: f32 = 13.0;
-pub const TITLE: f32 = 15.0;
+pub const MICRO: f32 = 10.0;
+pub const LABEL: f32 = 11.0;
+pub const SMALL: f32 = 12.0;
+pub const BODY: f32 = 13.0;
+pub const VALUE: f32 = 14.0;
+pub const TITLE: f32 = 16.0;
 pub const HERO: f32 = 26.0;
 
-pub const ROW: f32 = 22.0;
-pub const STAT_ROW: f32 = 20.0;
-pub const LIST_ROW: f32 = 24.0;
-pub const TOOLBAR: f32 = 40.0;
-pub const STATUS: f32 = 24.0;
+pub const ROW: f32 = 26.0;
+pub const STAT_ROW: f32 = 22.0;
+pub const LIST_ROW: f32 = 26.0;
+pub const TOOLBAR: f32 = 44.0;
+pub const STATUS: f32 = 26.0;
 
 pub const GAP: f32 = 4.0;
 pub const GAP_ROW: f32 = 6.0;
@@ -28,7 +28,10 @@ pub const SECTION_GAP: f32 = 6.0;
 pub type El<'a> = Element<'a, Message>;
 
 pub fn label<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
-    text(s).font(theme::LABEL).size(LABEL).color(theme::MUTED)
+    text(s)
+        .font(theme::LABEL)
+        .size(LABEL)
+        .color(theme::TEXT_SECONDARY)
 }
 
 pub fn eyebrow<'a>(s: &str) -> text::Text<'a> {
@@ -66,6 +69,17 @@ pub fn value_colored<'a>(s: impl text::IntoFragment<'a>, color: Color) -> text::
 
 pub fn title<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
     text(s).font(theme::UI_SEMI).size(TITLE).color(theme::TEXT)
+}
+
+pub fn scroll<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Message> {
+    scrollable(content)
+        .direction(scrollable::Direction::Vertical(
+            scrollable::Scrollbar::new()
+                .width(6)
+                .scroller_width(6)
+                .spacing(6),
+        ))
+        .style(theme::scroll)
 }
 
 pub fn clip(s: &str, max: usize) -> String {

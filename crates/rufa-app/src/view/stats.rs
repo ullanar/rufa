@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, scrollable, slider, space, text};
+use iced::widget::{button, column, container, row, slider, space, text};
 use iced::{Color, Length};
 use rufa_data::Info;
 use rufa_sim::stats::{Layer, Stats};
@@ -69,13 +69,12 @@ pub fn view(app: &App) -> El<'_> {
             item_attributes(app, doc, item),
         ));
     }
-    scrollable(container(col).padding(iced::Padding {
+    ui::scroll(container(col).padding(iced::Padding {
         top: 0.0,
         right: 10.0,
         bottom: 0.0,
         left: 0.0,
     }))
-    .style(theme::scroll)
     .height(Length::Fill)
     .into()
 }
