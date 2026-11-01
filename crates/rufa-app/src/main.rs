@@ -327,7 +327,11 @@ impl App {
 
     fn open_args(&mut self) {
         for arg in std::env::args_os().skip(1) {
-            if arg == "--graph" {
+            if arg == "--market" {
+                self.left = LeftTab::Market;
+            } else if arg == "--skills" {
+                self.left = LeftTab::Character;
+            } else if arg == "--graph" {
                 self.center = CenterTab::Graph;
             } else if arg == "--graph=cap" {
                 self.center = CenterTab::Graph;

@@ -233,7 +233,14 @@ fn market(app: &App) -> El<'_> {
     column![
         search("Search items", &app.market_search, Message::MarketSearch),
         modes,
-        scrollable(list).style(theme::scroll).height(Length::Fill),
+        scrollable(container(list).padding(iced::Padding {
+            top: 0.0,
+            right: 14.0,
+            bottom: 0.0,
+            left: 0.0
+        }))
+        .style(theme::scroll)
+        .height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
     .into()

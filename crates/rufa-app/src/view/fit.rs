@@ -440,7 +440,7 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
     let mut line = row![
         container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
         glyph,
-        text(ui::clip(&name, 30))
+        text(ui::clip(&name, 40))
             .size(ui::BODY)
             .font(theme::UI_MEDIUM)
             .color(theme::TEXT)
@@ -492,13 +492,13 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
 
 fn charge_cell<'a>(i: usize, charge: String) -> El<'a> {
     if charge.is_empty() {
-        return space().width(120).into();
+        return space().width(150).into();
     }
     mouse_area(
-        text(ui::clip(&charge, 20))
+        text(ui::clip(&charge, 26))
             .size(ui::SMALL)
             .color(theme::TEXT_SECONDARY)
-            .width(120)
+            .width(150)
             .wrapping(text::Wrapping::None),
     )
     .on_right_press(Message::LoadCharge(i, None))
