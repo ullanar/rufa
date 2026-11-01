@@ -56,6 +56,23 @@ pub fn segmented<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
         .into()
 }
 
+/// The same control at the size a tab strip needs.
+pub fn segmented_wide<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
+    let mut line = row![].spacing(1).align_y(iced::Alignment::Center);
+    for (label, on, msg) in options {
+        line = line.push(
+            button(text(label).size(BODY).font(theme::UI_MEDIUM))
+                .padding(pill(8.0))
+                .style(theme::segment(on))
+                .on_press(msg),
+        );
+    }
+    container(line)
+        .padding(1)
+        .style(theme::segment_frame)
+        .into()
+}
+
 /// A text field carries the same line box as a pill, so its caps also sit
 /// higher than the baseline gap below them.
 pub fn field(vertical: f32, horizontal: f32) -> iced::Padding {
