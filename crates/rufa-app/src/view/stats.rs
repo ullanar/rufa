@@ -32,14 +32,37 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             Some(fmt::num(s.defense.ehp, 0)),
             defense(app, s, narrow)
         ),
-        ui::section(
+    ]
+    .spacing(ui::SECTION_GAP);
+    let guns = s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps;
+    if guns > 0.0 {
+        col = col.push(ui::section(
             "Offense",
-            Some(fmt::num(
-                s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps,
-                1
-            )),
-            offense(app, doc, s, narrow)
-        ),
+            Some(fmt::num(guns, 1)),
+            offense(app, doc, s, narrow),
+        ));
+    }
+    if s.remote.any() {
+        let head = if s.remote.hp() > 0.0 {
+            format!("{} HP/s", fmt::num(s.remote.hp(), 1))
+        } else {
+            format!("{} GJ/s", fmt::num(s.remote.capacitor, 1))
+        };
+        col = col.push(ui::section_colored(
+            "Remote reps",
+            Some(head),
+            theme::SUCCESS_TEXT,
+            remote(s, narrow),
+        ));
+    }
+    if s.mining.any() {
+        col = col.push(ui::section(
+            "Mining",
+            Some(format!("{} m3/s", fmt::num(s.mining.total(), 2))),
+            mining(s, narrow),
+        ));
+    }
+    col = col.extend([
         ui::section("Capacitor", Some(cap_head), capacitor(doc, s, narrow)),
         ui::section(
             "Navigation",
@@ -56,8 +79,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             app.fit_price(doc).map(|v| format!("{} ISK", fmt::short(v))),
             price(app, doc, narrow)
         ),
-    ]
-    .spacing(ui::SECTION_GAP);
+    ]);
     if let Some(item) = app.selected_item.filter(|i| *i < doc.doc.fit.items.len()) {
         let count = app.selected.len();
         let (name, headline) = if count > 1 {
@@ -79,7 +101,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
 
 fn resources(s: &Stats, narrow: bool) -> El<'_> {
     let r = &s.resources;
-    column![
+    let mut col = column![
         ui::gauge(narrow, "CPU", r.cpu_used, r.cpu_total, "tf"),
         ui::gauge(narrow, "Powergrid", r.power_used, r.power_total, "MW"),
         ui::gauge(
@@ -89,34 +111,60 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
             r.calibration_total,
             ""
         ),
-        ui::gauge(
+    ]
+    .spacing(3);
+    if r.drone_bay_total > 0.0 || r.drone_bay_used > 0.0 {
+        col = col.push(ui::gauge(
             narrow,
             "Drone bandwidth",
             r.drone_bandwidth_used,
             r.drone_bandwidth_total,
-            "Mbit/s"
-        ),
-        ui::gauge(
+            "Mbit/s",
+        ));
+        col = col.push(ui::gauge(
             narrow,
             "Drone bay",
             r.drone_bay_used,
             r.drone_bay_total,
-            "m3"
-        ),
-        ui::stat_row(
+            "m3",
+        ));
+        col = col.push(ui::stat_row(
             narrow,
-            "Drones active",
-            format!("{} / {}", r.drones_active, r.drones_max)
-        ),
-        ui::stat_row(
+            "Drones in space",
+            format!("{} / {}", r.drones_active, r.drones_max),
+        ));
+    }
+    col = col.push(ui::stat_row(
+        narrow,
+        "Hardpoints free",
+        format!("{} turret, {} launcher", r.turrets_free, r.launchers_free),
+    ));
+    col = col.push(ui::gauge(narrow, "Cargo", r.cargo_used, r.cargo_total, "m3"));
+    if r.fighter_bay_total > 0.0 {
+        col = col.push(ui::gauge(
             narrow,
-            "Hardpoints free",
-            format!("{} turret, {} launcher", r.turrets_free, r.launchers_free)
-        ),
-        ui::gauge(narrow, "Cargo", r.cargo_used, r.cargo_total, "m3"),
-    ]
-    .spacing(3)
-    .into()
+            "Fighter bay",
+            r.fighter_bay_used,
+            r.fighter_bay_total,
+            "m3",
+        ));
+        col = col.push(ui::stat_row(
+            narrow,
+            "Fighter tubes",
+            format!("{} / {}", r.fighter_tubes_used, r.fighter_tubes_total),
+        ));
+    }
+    for ((name, _), size) in rufa_sim::stats::HOLDS.iter().zip(r.holds) {
+        if size <= 0.0 {
+            continue;
+        }
+        col = col.push(ui::stat_row(
+            narrow,
+            name,
+            format!("{} m3", fmt::num(size, 0)),
+        ));
+    }
+    col.into()
 }
 
 fn resist_cell<'a>(resonance: f64, color: Color, narrow: bool) -> El<'a> {
@@ -201,7 +249,10 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
             .align_x(iced::alignment::Horizontal::Right),
     ]
     .spacing(ui::GAP);
-    let rep = |name: &'static str, raw: f64, effective: f64| {
+    let rep = |name: &'static str, raw: f64, effective: f64| -> El<'a> {
+        if raw <= 0.0 && effective <= 0.0 {
+            return space().height(0).into();
+        }
         let shown = if narrow {
             format!("{} EHP/s", fmt::num(effective, 1))
         } else {
@@ -213,7 +264,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
         };
         ui::stat_row(narrow, name, shown)
     };
-    column![
+    let mut col = column![
         presets.wrap(),
         header,
         column![
@@ -249,8 +300,26 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
             d.hull_effective_repair_rate
         ),
     ]
-    .spacing(3)
-    .into()
+    .spacing(3);
+    if d.sustained.capped {
+        let sustained = [
+            ("Shield sustained", d.sustained.shield, d.shield_boost_rate),
+            ("Armor sustained", d.sustained.armor, d.armor_repair_rate),
+            ("Hull sustained", d.sustained.hull, d.hull_repair_rate),
+        ];
+        for (name, held, burst) in sustained {
+            if burst <= 0.0 {
+                continue;
+            }
+            col = col.push(ui::stat_row_colored(
+                narrow,
+                name,
+                format!("{} HP/s", fmt::num(held, 1)),
+                theme::WARNING_TEXT,
+            ));
+        }
+    }
+    col.into()
 }
 
 fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
@@ -265,24 +334,187 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         .get(app.target)
         .map(|p| p.name.as_str())
         .unwrap_or("target");
-    column![
-        ui::stat_row(narrow, "Weapon DPS", fmt::num(o.dps, 1)),
-        ui::stat_row(narrow, "With reload", fmt::num(o.dps_with_reload, 1)),
-        ui::stat_row(narrow, "Volley", fmt::num(o.volley, 1)),
-        ui::stat_row(narrow, "Drone DPS", fmt::num(o.drone_dps, 1)),
-        ui::stat_row(narrow, "Fighter DPS", fmt::num(o.fighter_dps, 1)),
-        ui::rule(),
+    let colors = [
+        theme::EM,
+        theme::THERMAL,
+        theme::KINETIC,
+        theme::EXPLOSIVE,
+    ];
+    let total: f64 = o.damage.iter().fold(0.0, |sum, part| sum + part);
+    let mut legend = row![].spacing(ui::GAP_ROW);
+    for ((name, part), color) in rufa_sim::stats::DAMAGE_NAMES
+        .iter()
+        .zip(o.damage)
+        .zip(colors)
+    {
+        if part <= 0.0 {
+            continue;
+        }
+        legend = legend.push(
+            row![
+                container(space().width(6).height(6)).style(theme::rounded(color, 1.0)),
+                text(format!("{name} {:.0}%", part / total * 100.0))
+                    .size(ui::MICRO)
+                    .color(theme::TEXT_SECONDARY)
+                    .wrapping(text::Wrapping::None),
+            ]
+            .spacing(3)
+            .align_y(iced::Alignment::Center),
+        );
+    }
+    let split: El<'a> = if total > 0.0 {
+        container(
+            column![ui::split_bar(o.damage, colors, 4.0), legend.wrap()]
+                .spacing(3),
+        )
+        .padding(iced::Padding {
+            top: 5.0,
+            right: 0.0,
+            bottom: 2.0,
+            left: 0.0,
+        })
+        .into()
+    } else {
+        space().height(0).into()
+    };
+    let mut col = column![].spacing(2);
+    for (name, value) in [
+        ("Weapon DPS", o.dps),
+        ("With reload", o.dps_with_reload),
+        ("Volley", o.volley),
+        ("Drone DPS", o.drone_dps),
+        ("Fighter DPS", o.fighter_dps),
+    ] {
+        if value <= 0.0 {
+            continue;
+        }
+        col = col.push(ui::stat_row(narrow, name, fmt::num(value, 1)));
+    }
+    col = col.push(split);
+    col = col.push(ui::rule());
+    col = col.push(
         container(
             row![
                 small_owned(format!("Applied vs {target_name}")).width(Length::Fill),
                 ui::value(fmt::num(applied, 1))
             ]
-            .align_y(iced::Alignment::Center)
+            .align_y(iced::Alignment::Center),
         )
         .height(ui::STAT_ROW),
-    ]
-    .spacing(2)
-    .into()
+    );
+    col.into()
+}
+
+fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
+    let r = &s.remote;
+    let hp = |value: f64| format!("{} HP/s", fmt::num(value, 1));
+    let mut col = column![].spacing(3);
+    if r.shield > 0.0 {
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Shield",
+            hp(r.shield),
+            theme::SUCCESS_TEXT,
+        ));
+    }
+    if r.armor > 0.0 {
+        let shown = if r.spools() {
+            format!(
+                "{} - {} HP/s",
+                fmt::num(r.armor, 1),
+                fmt::num(r.armor_spooled, 1)
+            )
+        } else {
+            hp(r.armor)
+        };
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Armor",
+            shown,
+            theme::SUCCESS_TEXT,
+        ));
+    }
+    if r.hull > 0.0 {
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Hull",
+            hp(r.hull),
+            theme::SUCCESS_TEXT,
+        ));
+    }
+    if r.capacitor > 0.0 {
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Capacitor",
+            format!("{} GJ/s", fmt::num(r.capacitor, 1)),
+            theme::SUCCESS_TEXT,
+        ));
+    }
+    if r.range > 0.0 {
+        col = col.push(ui::stat_row(narrow, "Range", fmt::distance(r.range)));
+    }
+    if r.drain > 0.0 {
+        col = col.push(ui::stat_row(
+            narrow,
+            "Capacitor used",
+            format!("{} GJ/s", fmt::num(r.drain, 1)),
+        ));
+    }
+    col.into()
+}
+
+fn mining<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
+    let m = &s.mining;
+    let rate = |value: f64| format!("{} m3/s", fmt::num(value, 2));
+    let mut col = column![].spacing(3);
+    if m.miner > 0.0 {
+        col = col.push(ui::stat_row(narrow, "Miners", rate(m.miner)));
+    }
+    if m.drone > 0.0 {
+        col = col.push(ui::stat_row(narrow, "Drones", rate(m.drone)));
+    }
+    col = col.push(ui::stat_row(
+        narrow,
+        "Per hour",
+        format!("{} m3", fmt::num(m.per_hour(), 0)),
+    ));
+    if m.drain > 0.0 {
+        col = col.push(ui::stat_row(
+            narrow,
+            "Capacitor used",
+            format!("{} GJ/s", fmt::num(m.drain, 1)),
+        ));
+    }
+    col.into()
+}
+
+fn lock_times<'a>(s: &'a Stats) -> El<'a> {
+    let mut line = row![].spacing(ui::GAP_ROW);
+    for ((name, _), seconds) in rufa_sim::stats::TARGET_CLASSES
+        .iter()
+        .zip(s.targeting.lock_times)
+    {
+        if seconds <= 0.0 {
+            continue;
+        }
+        line = line.push(
+            row![
+                text(*name)
+                    .size(ui::MICRO)
+                    .color(theme::MUTED)
+                    .wrapping(text::Wrapping::None),
+                text(format!("{:.1}s", seconds))
+                    .size(ui::MICRO)
+                    .font(theme::UI_MEDIUM)
+                    .color(theme::TEXT_SECONDARY)
+                    .wrapping(text::Wrapping::None),
+            ]
+            .spacing(3),
+        );
+    }
+    column![ui::label("LOCK TIME"), line.wrap()]
+        .spacing(2)
+        .into()
 }
 
 fn small_owned<'a>(s: String) -> text::Text<'a> {
@@ -321,7 +553,11 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     column![
         ui::stat_row_colored(narrow, "Stability", stability, color),
         ui::bar(
-            level.max(if sim.depleted_at.is_some() { 0.0 } else { 0.02 }),
+            if sim.depleted_at.is_some() {
+                0.0
+            } else {
+                level.max(0.02)
+            },
             bar_color,
             4.0
         ),
@@ -354,7 +590,7 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
 
 fn navigation(s: &Stats, narrow: bool) -> El<'_> {
     let n = &s.navigation;
-    column![
+    let mut col = column![
         ui::stat_row(
             narrow,
             "Max velocity",
@@ -374,13 +610,20 @@ fn navigation(s: &Stats, narrow: bool) -> El<'_> {
         ui::stat_row(narrow, "Mass", format!("{} kg", fmt::short(n.mass))),
         ui::stat_row(narrow, "Inertia modifier", fmt::num(n.agility, 3)),
     ]
-    .spacing(2)
-    .into()
+    .spacing(2);
+    if n.max_warp_distance > 0.0 {
+        col = col.push(ui::stat_row(
+            narrow,
+            "Max warp distance",
+            format!("{} AU", fmt::num(n.max_warp_distance, 1)),
+        ));
+    }
+    col.into()
 }
 
 fn targeting(s: &Stats, narrow: bool) -> El<'_> {
     let t = &s.targeting;
-    column![
+    let mut col = column![
         ui::stat_row(narrow, "Max targets", format!("{}", t.max_targets)),
         ui::stat_row(narrow, "Targeting range", fmt::distance(t.max_range)),
         ui::stat_row(
@@ -394,8 +637,19 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
             format!("{} {}", fmt::num(t.sensor_strength, 1), t.sensor_type)
         ),
     ]
-    .spacing(2)
-    .into()
+    .spacing(2);
+    if t.drone_control_range > 0.0 {
+        col = col.push(ui::stat_row(
+            narrow,
+            "Drone control range",
+            fmt::distance(t.drone_control_range),
+        ));
+    }
+    if t.scan_resolution > 0.0 {
+        col = col.push(ui::rule());
+        col = col.push(lock_times(s));
+    }
+    col.into()
 }
 
 fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {

@@ -320,8 +320,17 @@ fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
 
 type SlotFilter = fn(Slot) -> bool;
 
+const CHAR: f32 = 6.6;
+
+fn name_budget(width: f32, fixed: f32) -> usize {
+    (((width - fixed) / CHAR) as usize).clamp(6, 60)
+}
+
 fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     let compact = width < 700.0;
+    let charge_width = if compact { 90.0 } else { 140.0 };
+    let info_width = if compact { 0.0 } else { 200.0 };
+    let module_names = name_budget(width, 117.0 + charge_width + info_width);
     let fit = &doc.doc.fit;
     let layout = &doc.doc.layout;
     let mut col = column![].spacing(1).padding(iced::Padding {
@@ -376,7 +385,9 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         for index in 0..count.max(used as u8) {
             let slot = rack.slot(index);
             match fit.items.iter().position(|it| it.slot == slot) {
-                Some(i) => col = col.push(item_row(app, doc, i, rail_color(rack), compact)),
+                Some(i) => {
+                    col = col.push(item_row(app, doc, i, rail_color(rack), compact, module_names))
+                }
                 None => {
                     col = col.push(empty_row(
                         format!("{} slot", rack.label()),
@@ -387,7 +398,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         }
     }
 
-    if let Some(section) = drone_section(app, doc, compact) {
+    if let Some(section) = drone_section(app, doc, compact, width) {
         col = col.push(section);
     }
 
@@ -427,7 +438,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
             left: 2.0,
         }));
         for i in indexes {
-            col = col.push(item_row(app, doc, i, rail, compact));
+            col = col.push(item_row(app, doc, i, rail, compact, module_names));
         }
     }
 
@@ -436,7 +447,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     col.into()
 }
 
-fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool) -> Option<El<'a>> {
+fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> Option<El<'a>> {
     let Ok(game) = &app.game else { return None };
     let ids = app.ids?;
     let types = drones::types(&doc.doc.fit);
@@ -453,7 +464,9 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool) -> Option<El<'a>
     }
     for type_id in types {
         let room = drones::room(&game.info(), &ids, &doc.doc.calc, type_id);
-        col = col.push(drone_row(app, doc, type_id, room, load, compact));
+        let pips = f32::from(load.max_launched.clamp(1, 32) as u16) * 12.0;
+        let names = name_budget(width, 163.0 + pips + if compact { 0.0 } else { 160.0 });
+        col = col.push(drone_row(app, doc, type_id, room, load, compact, names));
     }
     Some(col.into())
 }
@@ -557,6 +570,7 @@ fn drone_row<'a>(
     room: drones::Room,
     load: drones::Load,
     compact: bool,
+    names: usize,
 ) -> El<'a> {
     let fit = &doc.doc.fit;
     let stack = drones::stack(fit, type_id);
@@ -583,10 +597,7 @@ fn drone_row<'a>(
         container(space().width(3).height(14)).style(theme::rounded(rail, 1.5)),
         icon,
         container(
-            text(ui::clip(
-                app.type_name(type_id),
-                if compact { 24 } else { 34 }
-            ))
+            text(ui::clip(app.type_name(type_id), names))
             .size(ui::BODY)
             .font(theme::UI_MEDIUM)
             .color(theme::TEXT)
@@ -862,7 +873,14 @@ fn item_info(app: &App, doc: &Doc, i: usize) -> Vec<String> {
     parts
 }
 
-fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color, compact: bool) -> El<'a> {
+fn item_row<'a>(
+    app: &'a App,
+    doc: &'a Doc,
+    i: usize,
+    rail: Color,
+    compact: bool,
+    names: usize,
+) -> El<'a> {
     let item = &doc.doc.fit.items[i];
     let result = doc.doc.calc.items.get(i);
     let state = result.map(|r| r.state).unwrap_or(item.state);
@@ -909,7 +927,7 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color, compact: bool
         glyph,
         icon,
         container(
-            text(ui::clip(&name, if compact { 28 } else { 40 }))
+            text(ui::clip(&name, names))
                 .size(ui::BODY)
                 .font(theme::UI_MEDIUM)
                 .color(theme::TEXT)
