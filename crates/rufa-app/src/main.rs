@@ -216,6 +216,7 @@ pub enum Message {
     MoveToCargo(usize),
     QuantityInput(usize, String),
     QuantityDone,
+    PickForRack(Option<rufa_sim::place::Rack>),
     ProjectItem(i32),
     ProjectFit(usize),
     Environment(EnvChoice),
@@ -344,6 +345,7 @@ pub struct App {
     pub skill_search: String,
     pub add_to: AddTo,
     pub quantity_edit: Option<(usize, String)>,
+    pub market_rack: Option<rufa_sim::place::Rack>,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -433,6 +435,7 @@ impl App {
             skill_search: String::new(),
             add_to: AddTo::Fit,
             quantity_edit: None,
+            market_rack: None,
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -932,6 +935,13 @@ impl App {
                 self.quantity_edit = Some((i, digits));
             }
             Message::QuantityDone => self.quantity_edit = None,
+            Message::PickForRack(rack) => {
+                self.market_rack = rack;
+                if rack.is_some() {
+                    self.left = LeftTab::Market;
+                    self.market_group = None;
+                }
+            }
             Message::MoveToCargo(i) => {
                 self.edit_active(|fit, _| edit::move_to_cargo(fit, i));
                 self.selected_item = None;
@@ -2645,6 +2655,26 @@ mod tests {
 
         let _ = app.update(Message::QuantityDone);
         assert_eq!(app.quantity_edit, None);
+        let _ = app.view();
+    }
+
+    #[test]
+    fn an_empty_slot_opens_the_market_for_that_rack() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::PickForRack(Some(rufa_sim::place::Rack::High)));
+        assert_eq!(app.left, LeftTab::Market);
+        assert_eq!(app.market_rack, Some(rufa_sim::place::Rack::High));
+        assert_eq!(app.market_group, None);
+        let _ = app.view();
+
+        let _ = app.update(Message::MarketSearch("autocannon".to_string()));
+        assert!(!app.market_results.is_empty(), "the search still runs");
+        let _ = app.view();
+
+        let _ = app.update(Message::PickForRack(None));
+        assert_eq!(app.market_rack, None);
         let _ = app.view();
     }
 

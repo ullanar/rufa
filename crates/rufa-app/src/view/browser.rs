@@ -363,26 +363,52 @@ fn market(app: &App) -> El<'_> {
             .style(theme::chip(app.add_to == target))
             .on_press(Message::AddTo(target))
     };
-    let modes = row![
+    let mut modes = row![
         ui::label("CLICK ADDS TO"),
         mode("fit", AddTo::Fit),
         mode("cargo", AddTo::Cargo),
         mode("projected", AddTo::Projected),
     ]
     .spacing(ui::GAP)
-    .align_y(iced::Alignment::Center)
-    .wrap();
+    .align_y(iced::Alignment::Center);
+    if let Some(rack) = app.market_rack {
+        modes = modes.push(
+            button(text(format!("{} only  ×", rack.label())).size(ui::MICRO))
+                .padding(ui::pill_tight(7.0))
+                .style(theme::chip(true))
+                .on_press(Message::PickForRack(None)),
+        );
+    }
+    let modes = modes.wrap();
+    let fits_rack = |type_id: i32| -> bool {
+        let Some(rack) = app.market_rack else {
+            return true;
+        };
+        let Some(ids) = app.ids else { return true };
+        rufa_sim::place::placement(&game.info(), &ids, type_id)
+            == Some(rufa_sim::place::Placement::Module(rack))
+    };
     let mut list = column![].spacing(1);
 
-    if app.market_search.trim().len() >= 2 {
+    if app.market_search.trim().len() >= 2 || app.market_rack.is_some() {
+        let mut any = false;
         for id in &app.market_results {
+            if !fits_rack(*id) {
+                continue;
+            }
+            any = true;
             list = list.push(list_button(
                 game.type_name(*id).to_string(),
                 Message::AddItem(*id),
             ));
         }
-        if app.market_results.is_empty() {
-            list = list.push(text("No matches").size(ui::SMALL).color(theme::FAINT));
+        if !any {
+            let hint = if app.market_search.trim().len() < 2 {
+                "Type two letters to search this rack"
+            } else {
+                "No matches"
+            };
+            list = list.push(text(hint).size(ui::SMALL).color(theme::FAINT));
         }
     } else {
         match app.market_group.and_then(|id| game.catalog.market_node(id)) {
