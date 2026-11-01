@@ -16,17 +16,42 @@ pub const SDE_FILE: &str = "sde.dat";
 pub const NAMES_FILE: &str = "names.dat";
 pub const TEXTS_FILE: &str = "texts.dat";
 
+pub fn home_dir() -> PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home);
+    }
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        return PathBuf::from(profile);
+    }
+    if let (Some(drive), Some(path)) = (std::env::var_os("HOMEDRIVE"), std::env::var_os("HOMEPATH"))
+    {
+        let mut out = PathBuf::from(drive);
+        out.push(path);
+        return out;
+    }
+    PathBuf::from(".")
+}
+
 pub fn data_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("RUFA_DATA_DIR") {
         return PathBuf::from(dir);
     }
+    if cfg!(target_os = "windows") {
+        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+            return PathBuf::from(dir).join("rufa");
+        }
+        return home_dir().join("AppData").join("Local").join("rufa");
+    }
+    if cfg!(target_os = "macos") {
+        return home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("rufa");
+    }
     if let Some(dir) = std::env::var_os("XDG_DATA_HOME") {
         return PathBuf::from(dir).join("rufa");
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    home.join(".local").join("share").join("rufa")
+    home_dir().join(".local").join("share").join("rufa")
 }
 
 pub struct Bundle {

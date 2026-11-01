@@ -192,18 +192,23 @@ fn query_param(request: &str, key: &str) -> Option<String> {
 }
 
 fn open_browser(url: &str) -> Result<(), String> {
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(target_os = "windows") {
-        "explorer"
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", url]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
     } else {
-        "xdg-open"
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
     };
-    std::process::Command::new(opener)
-        .arg(url)
+    command
         .spawn()
         .map(|_| ())
-        .map_err(|e| format!("cannot open a browser with {opener}: {e}"))
+        .map_err(|e| format!("cannot open a browser: {e}"))
 }
 
 fn fetch_name(character_id: i64) -> Result<String, String> {
