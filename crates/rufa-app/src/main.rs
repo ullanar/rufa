@@ -687,13 +687,21 @@ impl App {
             "Calculated in {:.2} ms",
             doc.last_calc.as_secs_f64() * 1000.0
         );
-        self.docs.push(Doc {
-            doc,
-            path,
-            dirty: false,
-        });
-        self.active = self.docs.len() - 1;
+        // A newly opened fit goes first: the one just asked for is the one to
+        // look at, and the tab strip keeps it in sight.
+        self.docs.insert(
+            0,
+            Doc {
+                doc,
+                path,
+                dirty: false,
+            },
+        );
+        self.active = 0;
         self.selected_item = None;
+        self.selected.clear();
+        self.menu = None;
+        self.hovered_tab = None;
     }
 
     fn stale_price_types(&self) -> Vec<i32> {
@@ -2445,7 +2453,7 @@ mod tests {
         let _ = app.update(Message::NewFit(rifter));
         let _ = app.update(Message::AddItem(ac));
         let _ = app.update(Message::AddItem(emp));
-        let o = &app.docs[1].doc.stats.offense;
+        let o = &app.docs[app.active].doc.stats.offense;
         let split: f64 = o.damage.iter().sum();
         assert!((split - o.dps).abs() < 0.01, "{:?} vs {}", o.damage, o.dps);
         assert!(
@@ -2798,6 +2806,19 @@ mod tests {
     }
 
     #[test]
+    fn a_fit_opens_in_front_of_the_ones_already_open() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let vexor = type_id(&app, "Vexor");
+        let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::NewFit(vexor));
+        assert_eq!(app.active, 0);
+        assert_eq!(app.docs[0].doc.fit.ship.type_id, vexor, "the newest leads");
+        assert_eq!(app.docs[1].doc.fit.ship.type_id, rifter);
+        let _ = app.view();
+    }
+
+    #[test]
     fn market_search_finds_modules() {
         let Some(mut app) = app() else { return };
         let _ = app.update(Message::MarketSearch("damage control".to_string()));
@@ -2892,11 +2913,13 @@ mod tests {
         }));
         assert!((app.docs[0].doc.stats.navigation.max_velocity - speed).abs() < 1e-6);
 
+        // The webbing fit opens in front, so the target it slows sits behind it.
         let _ = app.update(Message::NewFit(rifter));
         let _ = app.update(Message::AddItem(web));
-        let _ = app.update(Message::SelectTab(0));
-        let _ = app.update(Message::ProjectFit(1));
-        assert!(app.docs[0].doc.stats.navigation.max_velocity < speed * 0.6);
+        let (webber, target) = (0, 1);
+        let _ = app.update(Message::SelectTab(target));
+        let _ = app.update(Message::ProjectFit(webber));
+        assert!(app.docs[target].doc.stats.navigation.max_velocity < speed * 0.6);
     }
 
     #[test]
@@ -3016,7 +3039,7 @@ mod tests {
         let _ = app.update(Message::AddItem(einherji));
         let abilities = edit::fighter_abilities(&game.info(), einherji);
         assert!(abilities.len() >= 2, "{abilities:?}");
-        let dps_default = app.docs[1].doc.stats.offense.fighter_dps;
+        let dps_default = app.docs[app.active].doc.stats.offense.fighter_dps;
         assert!(dps_default > 0.0);
         let (attack, _, _) = abilities
             .iter()
@@ -3026,7 +3049,11 @@ mod tests {
             .cloned()
             .unwrap_or(abilities[0].clone());
         let _ = app.update(Message::ToggleAbility(0, attack));
-        assert!(app.docs[1].doc.fit.items[0].fighter_abilities.is_some());
+        assert!(
+            app.docs[app.active].doc.fit.items[0]
+                .fighter_abilities
+                .is_some()
+        );
     }
 
     #[test]
@@ -3087,10 +3114,10 @@ mod tests {
         assert_eq!(app.implant_sets.len(), 1);
         assert_eq!(rufa_store::implants::load(&app.config_dir).len(), 1);
         let _ = app.update(Message::NewFit(rifter));
-        let plain = app.docs[1].doc.stats.navigation.max_velocity;
+        let plain = app.docs[app.active].doc.stats.navigation.max_velocity;
         assert!(plain < boosted);
         let _ = app.update(Message::ApplyImplantSet(0));
-        assert!((app.docs[1].doc.stats.navigation.max_velocity - boosted).abs() < 1e-6);
+        assert!((app.docs[app.active].doc.stats.navigation.max_velocity - boosted).abs() < 1e-6);
         let _ = app.update(Message::ApplyImplantSet(0));
         assert_eq!(
             app.docs[1].doc.fit.items.len(),
@@ -3183,16 +3210,26 @@ mod tests {
         let _ = app.update(Message::NewFit(kestrel));
         let _ = app.update(Message::AddItem(ac));
         assert_eq!(
-            app.docs[1].doc.fit.items.len(),
+            app.docs[app.active].doc.fit.items.len(),
             0,
             "no turret hardpoints: {}",
             app.status
         );
         assert!(app.status.contains("does not fit"), "{}", app.status);
         let _ = app.update(Message::AddItem(large_rig));
-        assert_eq!(app.docs[1].doc.fit.items.len(), 0, "{}", app.status);
+        assert_eq!(
+            app.docs[app.active].doc.fit.items.len(),
+            0,
+            "{}",
+            app.status
+        );
         let _ = app.update(Message::AddItem(capital));
-        assert_eq!(app.docs[1].doc.fit.items.len(), 0, "{}", app.status);
+        assert_eq!(
+            app.docs[app.active].doc.fit.items.len(),
+            0,
+            "{}",
+            app.status
+        );
         let bcs = type_id(&app, "Ballistic Control System II");
         for _ in 0..2 {
             let _ = app.update(Message::AddItem(bcs));
@@ -3202,7 +3239,7 @@ mod tests {
         let _ = app.update(Message::AddItem(launcher));
         let _ = app.update(Message::AddItem(launcher));
         assert_eq!(
-            app.docs[1].doc.fit.items.len(),
+            app.docs[app.active].doc.fit.items.len(),
             6,
             "over CPU is allowed, only shown: {}",
             app.status
