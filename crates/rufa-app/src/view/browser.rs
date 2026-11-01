@@ -54,12 +54,22 @@ fn list_button<'a>(label: String, msg: Message) -> El<'a> {
 fn group_button<'a>(label: String, count: usize, msg: Message) -> El<'a> {
     button(
         row![
-            text(label)
-                .size(ui::BODY)
+            container(
+                text(label)
+                    .size(ui::BODY)
+                    .wrapping(text::Wrapping::None)
+                    .width(Length::Shrink),
+            )
+            .clip(true)
+            .width(Length::Fill),
+            text(count.to_string())
+                .size(ui::MICRO)
+                .color(theme::MUTED)
                 .wrapping(text::Wrapping::None)
-                .width(Length::Fill),
-            text(count.to_string()).size(ui::MICRO).color(theme::MUTED),
+                .width(22)
+                .align_x(iced::alignment::Horizontal::Right),
         ]
+        .spacing(ui::GAP_ROW)
         .align_y(iced::Alignment::Center),
     )
     .padding([3, 8])
