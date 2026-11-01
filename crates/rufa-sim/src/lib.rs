@@ -1,6 +1,7 @@
 pub mod attrs;
 pub mod cap;
 pub mod document;
+pub mod drones;
 pub mod edit;
 pub mod graph;
 pub mod layout;

@@ -142,7 +142,7 @@ pub fn item_dps_at(
 pub fn dps_at(ids: &AttrIds, fit: &Fit, calc: &Calculation, distance: f64, target: &Target) -> f64 {
     (0..fit.items.len())
         .map(|i| item_dps_at(ids, fit, calc, i, distance, target))
-        .sum()
+        .fold(0.0, |total, dps| total + dps)
 }
 
 pub fn reach(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> f64 {

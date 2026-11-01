@@ -39,6 +39,7 @@ attr_ids! {
     drone_capacity_load = "droneCapacityLoad",
     drone_bandwidth = "droneBandwidth",
     drone_bandwidth_used = "droneBandwidthUsed",
+    drone_bandwidth_load = "droneBandwidthLoad",
     max_active_drones = "maxActiveDrones",
     drone_active = "droneActive",
     fighter_capacity = "fighterCapacity",
