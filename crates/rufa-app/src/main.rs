@@ -218,6 +218,8 @@ pub enum Message {
     QuantityDone,
     PickForRack(Option<rufa_sim::place::Rack>),
     ToggleStatSection(&'static str),
+    HoverSaved(Option<PathBuf>),
+    DuplicateSaved(PathBuf),
     ProjectItem(i32),
     ProjectFit(usize),
     Environment(EnvChoice),
@@ -348,6 +350,7 @@ pub struct App {
     pub quantity_edit: Option<(usize, String)>,
     pub market_rack: Option<rufa_sim::place::Rack>,
     pub stats_folded: std::collections::BTreeSet<&'static str>,
+    pub hovered_saved: Option<PathBuf>,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -439,6 +442,7 @@ impl App {
             quantity_edit: None,
             market_rack: None,
             stats_folded: std::collections::BTreeSet::new(),
+            hovered_saved: None,
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -968,6 +972,7 @@ impl App {
                 self.quantity_edit = Some((i, digits));
             }
             Message::QuantityDone => self.quantity_edit = None,
+            Message::HoverSaved(path) => self.hovered_saved = path,
             Message::ToggleStatSection(name) => {
                 if !self.stats_folded.remove(name) {
                     self.stats_folded.insert(name);
@@ -1108,6 +1113,33 @@ impl App {
                 }
                 Err(e) => self.status = format!("Pyfa import failed: {e}"),
             },
+            Message::DuplicateSaved(path) => {
+                if let Some((game, _)) = self.ready() {
+                    match rufa_store::load_fit(&game.info(), &path) {
+                        Ok(mut fit) => {
+                            let hull = game.type_name(fit.ship.type_id).to_string();
+                            let name = fit.name.clone().unwrap_or_else(|| hull.clone());
+                            fit.name = Some(format!("{name} copy"));
+                            match rufa_store::save_fit(
+                                &game.info(),
+                                &self.config_dir,
+                                &fit,
+                                None,
+                                &hull,
+                            ) {
+                                Ok(path) => {
+                                    self.status = format!("Copied to {}", path.display());
+                                    self.saved =
+                                        rufa_store::saved_fits(&game.info(), &self.config_dir)
+                                            .unwrap_or_default();
+                                }
+                                Err(e) => self.status = format!("Copy failed: {e}"),
+                            }
+                        }
+                        Err(e) => self.status = format!("Cannot read {}: {e}", path.display()),
+                    }
+                }
+            }
             Message::DeleteSaved(path) => {
                 if let Some((game, _)) = self.ready() {
                     match std::fs::remove_file(&path) {
@@ -2730,6 +2762,38 @@ mod tests {
 
         let _ = app.update(Message::ToggleStatSection("Defense"));
         assert!(!app.stats_folded.contains("Defense"));
+        let _ = app.view();
+    }
+
+    #[test]
+    fn a_saved_fit_can_be_copied_and_deleted() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::RenameFit("brawler".to_string()));
+        let _ = app.update(Message::Save);
+        assert_eq!(app.saved.len(), 1, "{:?}", app.status);
+        let original = app.saved[0].path.clone();
+
+        let _ = app.update(Message::DuplicateSaved(original.clone()));
+        assert_eq!(app.saved.len(), 2, "{:?}", app.status);
+        assert!(
+            app.saved.iter().any(|f| f.name == "brawler copy"),
+            "{:?}",
+            app.saved.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+
+        let copy = app
+            .saved
+            .iter()
+            .find(|f| f.name == "brawler copy")
+            .map(|f| f.path.clone())
+            .unwrap();
+        let _ = app.update(Message::DeleteSaved(copy));
+        assert_eq!(app.saved.len(), 1);
+        assert_eq!(app.saved[0].path, original);
+
+        let _ = app.update(Message::HoverSaved(Some(original)));
         let _ = app.view();
     }
 

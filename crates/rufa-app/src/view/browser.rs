@@ -1,5 +1,7 @@
 use iced::Length;
-use iced::widget::{button, column, container, image, row, space, text, text_input};
+use iced::widget::{
+    button, column, container, image, mouse_area, row, space, text, text_input, tooltip,
+};
 use rufa_data::catalog::MARKET_ROOTS;
 
 use crate::theme;
@@ -45,17 +47,26 @@ fn search<'a>(placeholder: &'a str, value: &'a str, on_input: fn(String) -> Mess
 }
 
 /// The type's own picture, or the space it would take, so names stay aligned.
-fn icon_cell<'a>(app: &App, type_id: i32) -> El<'a> {
-    match app.icon(Kind::Icon, type_id) {
-        Some(handle) => image(handle).width(18).height(18).into(),
-        None => space().width(18).height(18).into(),
-    }
+fn icon_cell<'a>(app: &App, type_id: i32, size: f32) -> El<'a> {
+    let inner: El<'a> = match app.icon(Kind::Icon, type_id) {
+        Some(handle) => image(handle)
+            .width(size)
+            .height(size)
+            .border_radius(3.0)
+            .into(),
+        None => space().width(size).height(size).into(),
+    };
+    container(inner)
+        .width(size)
+        .height(size)
+        .style(theme::rounded(theme::SUNKEN, 3.0))
+        .into()
 }
 
 fn list_button<'a>(app: &App, type_id: i32, label: String, msg: Message) -> El<'a> {
     button(
         row![
-            icon_cell(app, type_id),
+            icon_cell(app, type_id, 18.0),
             container(text(label).size(ui::BODY).wrapping(text::Wrapping::None))
                 .clip(true)
                 .width(Length::Fill),
@@ -169,7 +180,7 @@ fn ships(app: &App) -> El<'_> {
 fn hull_button<'a>(app: &App, name: &str, group: &str, id: i32) -> El<'a> {
     button(
         row![
-            icon_cell(app, id),
+            icon_cell(app, id, 18.0),
             container(
                 text(name.to_string())
                     .size(ui::BODY)
@@ -214,32 +225,38 @@ fn fits(app: &App) -> El<'_> {
         for (group_id, group_name, hulls) in fit_tree(app, game) {
             let folded = app.fits_folded.contains(&group_id);
             let count = hulls.iter().map(|(_, f)| f.len()).sum::<usize>();
-            list = list.push(fold_button(
-                &group_name,
-                count,
-                folded,
-                Message::ToggleFitGroup(group_id),
-            ));
+            list = list.push(
+                container(fold_button(
+                    &group_name,
+                    count,
+                    folded,
+                    Message::ToggleFitGroup(group_id),
+                ))
+                .style(theme::group_band),
+            );
             if folded {
                 continue;
             }
             for (hull, fits) in hulls {
+                let count = fits.len();
+                let mut branch = column![hull_header(app, hull, count)].spacing(1);
+                for fit in fits {
+                    branch = branch.push(fit_row(app, fit, open(fit), None, 22.0));
+                }
                 list = list.push(
-                    container(
-                        row![icon_cell(app, hull), ui::eyebrow(app.type_name(hull))]
-                            .spacing(ui::GAP_ROW)
-                            .align_y(iced::Alignment::Center),
-                    )
+                    row![
+                        container(space().width(1).height(Length::Fill))
+                            .style(theme::fill(theme::EDGE)),
+                        branch,
+                    ]
+                    .spacing(ui::GAP_ROW)
                     .padding(iced::Padding {
-                        top: 3.0,
-                        right: 2.0,
-                        bottom: 1.0,
-                        left: 10.0,
+                        top: 1.0,
+                        right: 0.0,
+                        bottom: 3.0,
+                        left: 16.0,
                     }),
                 );
-                for fit in fits {
-                    list = list.push(fit_row(fit, open(fit), None, 14.0));
-                }
             }
         }
     } else {
@@ -258,7 +275,7 @@ fn fits(app: &App) -> El<'_> {
         }
         for fit in hits {
             let hull = fit.hull.map(|h| app.type_name(h)).unwrap_or("");
-            list = list.push(fit_row(fit, open(fit), Some(hull), 4.0));
+            list = list.push(fit_row(app, fit, open(fit), Some(hull), 4.0));
         }
     }
 
@@ -315,6 +332,33 @@ fn fit_tree<'a>(app: &'a App, game: &'static rufa_data::Game) -> FitTree<'a> {
     groups
 }
 
+/// The hull a group of saved fits belongs to: its picture, its name, and how
+/// many fits hang under it.
+fn hull_header<'a>(app: &App, hull: i32, count: usize) -> El<'a> {
+    row![
+        icon_cell(app, hull, 16.0),
+        container(
+            text(app.type_name(hull).to_string())
+                .size(ui::SMALL)
+                .font(theme::UI_MEDIUM)
+                .color(theme::MUTED)
+                .wrapping(text::Wrapping::None)
+        )
+        .clip(true)
+        .width(Length::Fill),
+        text(count.to_string()).size(ui::MICRO).color(theme::FAINT),
+    ]
+    .spacing(ui::GAP_ROW)
+    .padding(iced::Padding {
+        top: 5.0,
+        right: 8.0,
+        bottom: 1.0,
+        left: 4.0,
+    })
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
 fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<'a> {
     button(
         row![
@@ -342,6 +386,7 @@ fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<
 }
 
 fn fit_row<'a>(
+    app: &App,
     fit: &'a rufa_store::SavedFit,
     open: bool,
     hull: Option<&'a str>,
@@ -363,23 +408,55 @@ fn fit_row<'a>(
     if let Some(hull) = hull {
         line = line.push(text(hull).size(ui::MICRO).color(theme::MUTED));
     }
-    row![
-        button(line)
-            .padding(iced::Padding {
-                top: 3.0,
-                right: 8.0,
-                bottom: 3.0,
-                left: indent,
-            })
-            .width(Length::Fill)
-            .style(theme::list_item(false))
-            .on_press(Message::OpenSaved(fit.path.clone())),
-        button(text("×").size(ui::SMALL))
-            .padding([3, 5])
-            .style(theme::ghost)
-            .on_press(Message::DeleteSaved(fit.path.clone())),
-    ]
-    .align_y(iced::Alignment::Center)
+    // Copying and deleting are not offered at rest, only under the cursor.
+    // The whole row carries the hover, so moving onto a button keeps it.
+    let hovered = app.hovered_saved.as_deref() == Some(fit.path.as_path());
+    let action = |glyph: &'static str, hint: &'static str, msg: Message| {
+        tooltip(
+            button(text(glyph).size(ui::SMALL))
+                .padding([3, 6])
+                .style(theme::ghost)
+                .on_press(msg),
+            container(text(hint).size(ui::SMALL))
+                .padding([4, 8])
+                .style(theme::tooltip),
+            tooltip::Position::Left,
+        )
+        .delay(std::time::Duration::from_millis(400))
+    };
+    let actions: El<'a> = if hovered {
+        row![
+            action(
+                "\u{29c9}",
+                "Duplicate",
+                Message::DuplicateSaved(fit.path.clone())
+            ),
+            action("\u{00d7}", "Delete", Message::DeleteSaved(fit.path.clone())),
+        ]
+        .spacing(ui::GAP_ROW)
+        .into()
+    } else {
+        space().width(58).into()
+    };
+    mouse_area(
+        row![
+            button(line)
+                .padding(iced::Padding {
+                    top: 3.0,
+                    right: 8.0,
+                    bottom: 3.0,
+                    left: indent,
+                })
+                .width(Length::Fill)
+                .style(theme::list_item(open))
+                .on_press(Message::OpenSaved(fit.path.clone())),
+            actions,
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
+    )
+    .on_enter(Message::HoverSaved(Some(fit.path.clone())))
+    .on_exit(Message::HoverSaved(None))
     .into()
 }
 

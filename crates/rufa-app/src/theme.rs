@@ -325,11 +325,16 @@ pub fn list_item(selected: bool) -> impl Fn(&Theme, button::Status) -> button::S
             flat(Some(ACCENT_WASH), TEXT, None, 4.0)
         } else {
             match status {
-                button::Status::Hovered => flat(Some(RAISED), TEXT, None, 4.0),
+                button::Status::Hovered => flat(Some(OVERLAY), TEXT, None, 4.0),
                 _ => flat(None, TEXT_SECONDARY, None, 4.0),
             }
         }
     }
+}
+
+/// The band a tree group sits on, so one category never runs into the next.
+pub fn group_band(_theme: &Theme) -> container::Style {
+    boxed(RAISED, None, 4.0)
 }
 
 pub fn input(_theme: &Theme, status: text_input::Status) -> text_input::Style {
