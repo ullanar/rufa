@@ -25,31 +25,44 @@ const MIN_BROWSER: f32 = 160.0;
 const MIN_FIT: f32 = 300.0;
 const MIN_STATS: f32 = 200.0;
 
+/// Wayland matches a window to its desktop entry by this name. The field
+/// exists on Linux alone; the other platforms carry different ones.
+#[cfg(target_os = "linux")]
+fn platform_specific() -> iced::window::settings::PlatformSpecific {
+    iced::window::settings::PlatformSpecific {
+        application_id: setup::APP_ID.to_string(),
+        ..Default::default()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn platform_specific() -> iced::window::settings::PlatformSpecific {
+    iced::window::settings::PlatformSpecific::default()
+}
+
 fn main() -> iced::Result {
     if std::env::var_os(rufa_data::selfupdate::SELF_TEST).is_some() {
         std::thread::sleep(std::time::Duration::from_millis(200));
         return Ok(());
     }
+    let window = iced::window::Settings {
+        size: iced::Size::new(1440.0, 900.0),
+        min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
+        icon: iced::window::icon::from_file_data(
+            include_bytes!("../assets/icons/rufa-256.png"),
+            None,
+        )
+        .ok(),
+        platform_specific: platform_specific(),
+        ..Default::default()
+    };
     let mut application = iced::application(App::boot, App::update, App::view)
         .title(App::title)
         .theme(theme::of)
         .style(theme::root)
         .subscription(App::subscription)
         .scale_factor(|app: &App| app.settings.ui_scale.clamp(0.75, 2.5))
-        .window(iced::window::Settings {
-            size: iced::Size::new(1440.0, 900.0),
-            min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
-            icon: iced::window::icon::from_file_data(
-                include_bytes!("../assets/icons/rufa-256.png"),
-                None,
-            )
-            .ok(),
-            platform_specific: iced::window::settings::PlatformSpecific {
-                application_id: setup::APP_ID.to_string(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
+        .window(window)
         .default_font(theme::UI)
         .antialiasing(true);
     for font in theme::FONTS {
