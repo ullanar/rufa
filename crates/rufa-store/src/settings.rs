@@ -55,14 +55,38 @@ impl Settings {
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         let text = format!(
-            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\n",
+            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\n",
             self.skill_level,
             self.factor_reload,
             self.character,
             self.browser_ratio,
             self.fit_ratio,
-            self.esi_client_id
+            self.esi_client_id,
+            self.ui_scale
         );
         std::fs::write(dir.join(FILE), text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_field_survives_a_save_and_a_load() {
+        let dir = std::env::temp_dir().join(format!("rufa-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let written = Settings {
+            skill_level: 4,
+            factor_reload: true,
+            character: "Pilot".to_string(),
+            browser_ratio: 0.25,
+            fit_ratio: 0.6,
+            esi_client_id: "abc".to_string(),
+            ui_scale: 1.2,
+        };
+        written.save(&dir).unwrap();
+        assert_eq!(Settings::load(&dir), written);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
