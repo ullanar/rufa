@@ -604,7 +604,7 @@ impl App {
                     let targets = self.charge_targets(game, ids, type_id);
                     if targets.is_empty() {
                         self.edit_active(|fit, layout| {
-                            edit::add(fit, &game.info(), &ids, layout, type_id).map(|_| ())
+                            edit::add_checked(fit, &game.info(), &ids, layout, type_id).map(|_| ())
                         });
                     } else {
                         self.edit_active(|fit, _| {
@@ -1207,7 +1207,7 @@ impl App {
     }
 
     pub fn describe_violation(&self, v: &rufa_sim::Violation) -> String {
-        use rufa_sim::{Rule, Target};
+        use rufa_sim::Target;
         let target = match v.target {
             Target::Ship => self
                 .type_name(self.active_fit().map(|f| f.ship.type_id).unwrap_or(0))
@@ -1218,30 +1218,7 @@ impl App {
                 .map(|it| self.type_name(it.type_id).to_string())
                 .unwrap_or_default(),
         };
-        let rule = match &v.rule {
-            Rule::Resource {
-                resource,
-                used,
-                available,
-            } => format!("{resource:?} {used:.1} of {available:.1}"),
-            Rule::Slots {
-                slot,
-                used,
-                available,
-            } => format!("{slot:?} slots {used} of {available}"),
-            Rule::Skill {
-                type_id,
-                required,
-                level,
-            } => format!("needs {} {required}, has {level}", self.type_name(*type_id)),
-            Rule::MaxGroup { used, allowed, .. } => {
-                format!("too many of this group: {used}, allowed {allowed}")
-            }
-            Rule::MaxType { used, allowed, .. } => {
-                format!("too many of this type: {used}, allowed {allowed}")
-            }
-            other => format!("{other:?}"),
-        };
+        let rule = edit::rule_text(&v.rule);
         format!("{target}: {rule}")
     }
 
@@ -1766,13 +1743,64 @@ mod tests {
     }
 
     #[test]
+    fn modules_the_hull_rejects_are_refused() {
+        let Some(mut app) = app() else { return };
+        let kestrel = type_id(&app, "Kestrel");
+        let ac = type_id(&app, "200mm AutoCannon II");
+        let large_rig = type_id(&app, "Large Trimark Armor Pump I");
+        let capital = type_id(&app, "Capital Armor Repairer I");
+        let launcher = type_id(&app, "Rocket Launcher II");
+        let _ = app.update(Message::NewFit(kestrel));
+        for _ in 0..4 {
+            let _ = app.update(Message::AddItem(launcher));
+        }
+        assert_eq!(app.docs[0].doc.fit.items.len(), 4, "{}", app.status);
+        let _ = app.update(Message::NewFit(kestrel));
+        let _ = app.update(Message::AddItem(ac));
+        assert_eq!(
+            app.docs[1].doc.fit.items.len(),
+            0,
+            "no turret hardpoints: {}",
+            app.status
+        );
+        assert!(app.status.contains("does not fit"), "{}", app.status);
+        let _ = app.update(Message::AddItem(large_rig));
+        assert_eq!(app.docs[1].doc.fit.items.len(), 0, "{}", app.status);
+        let _ = app.update(Message::AddItem(capital));
+        assert_eq!(app.docs[1].doc.fit.items.len(), 0, "{}", app.status);
+        let bcs = type_id(&app, "Ballistic Control System II");
+        for _ in 0..2 {
+            let _ = app.update(Message::AddItem(bcs));
+        }
+        let _ = app.update(Message::AddItem(launcher));
+        let _ = app.update(Message::AddItem(launcher));
+        let _ = app.update(Message::AddItem(launcher));
+        let _ = app.update(Message::AddItem(launcher));
+        assert_eq!(
+            app.docs[1].doc.fit.items.len(),
+            6,
+            "over CPU is allowed, only shown: {}",
+            app.status
+        );
+    }
+
+    #[test]
     fn rack_full_is_reported_not_applied() {
         let Some(mut app) = app() else { return };
         let rifter = type_id(&app, "Rifter");
         let dcu = type_id(&app, "Damage Control II");
         let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::AddItem(dcu));
+        let _ = app.update(Message::AddItem(dcu));
+        assert_eq!(app.docs[0].doc.fit.items.len(), 1);
+        assert!(
+            app.status.contains("too many of this group"),
+            "{}",
+            app.status
+        );
+        let gyro = type_id(&app, "Gyrostabilizer II");
         for _ in 0..5 {
-            let _ = app.update(Message::AddItem(dcu));
+            let _ = app.update(Message::AddItem(gyro));
         }
         assert_eq!(app.docs[0].doc.fit.items.len(), 4);
         assert!(app.status.contains("no free Low slot"), "{}", app.status);

@@ -7,13 +7,14 @@ use crate::layout::SlotLayout;
 use crate::place::{Placement, Rack, initial_state, new_item, placement};
 use crate::{Character, Charge, Environment, Fit, Projection, Ship, Slot, State};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EditError {
     UnknownType(i32),
     RackFull(Rack),
     NotAModule(usize),
     NotACharge(i32),
     NoSuchItem(usize),
+    DoesNotFit(crate::Rule),
 }
 
 impl std::fmt::Display for EditError {
@@ -24,6 +25,7 @@ impl std::fmt::Display for EditError {
             EditError::NotAModule(i) => write!(f, "item {i} is not a module"),
             EditError::NotACharge(id) => write!(f, "type {id} is not a charge"),
             EditError::NoSuchItem(i) => write!(f, "no item {i}"),
+            EditError::DoesNotFit(rule) => write!(f, "does not fit: {}", rule_text(rule)),
         }
     }
 }
@@ -381,4 +383,80 @@ pub fn toggle_ability(
     }
     fit.items[index].fighter_abilities = Some(set);
     Ok(())
+}
+
+pub fn rule_text(rule: &crate::Rule) -> String {
+    use crate::Rule;
+    match rule {
+        Rule::Resource {
+            resource,
+            used,
+            available,
+        } => format!("{resource:?} {used:.1} of {available:.1}"),
+        Rule::Slots {
+            slot,
+            used,
+            available,
+        } => format!("{slot:?} slots {used} of {available}"),
+        Rule::Skill {
+            required, level, ..
+        } => format!("skill level {required} needed, has {level}"),
+        Rule::MaxGroup { used, allowed, .. } => {
+            format!("too many of this group: {used}, allowed {allowed}")
+        }
+        Rule::MaxType { used, allowed, .. } => {
+            format!("too many of this type: {used}, allowed {allowed}")
+        }
+        Rule::WrongSlot { expected } => format!("belongs in a {expected:?} slot"),
+        Rule::RigSize { .. } => "rig size does not match the hull".to_string(),
+        Rule::ShipRestricted => "this hull cannot fit it".to_string(),
+        Rule::CapitalItem => "capital module on a subcapital hull".to_string(),
+        Rule::StructureItem => "structure module on a ship".to_string(),
+        Rule::ShipItem => "ship module on a structure".to_string(),
+        Rule::ChargeGroup => "charge type does not match the module".to_string(),
+        Rule::ChargeSize { .. } => "charge size does not match the module".to_string(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn structural(rule: &crate::Rule) -> bool {
+    !matches!(
+        rule,
+        crate::Rule::Resource { .. } | crate::Rule::Skill { .. }
+    )
+}
+
+pub fn add_checked(
+    fit: &mut Fit,
+    info: &impl Info,
+    ids: &AttrIds,
+    layout: &SlotLayout,
+    type_id: i32,
+) -> Result<usize, EditError> {
+    let options = crate::Options {
+        sources: false,
+        validate: true,
+    };
+    let before = esf_dogma_engine::calculate(info, fit, &options)
+        .violations
+        .unwrap_or_default();
+    let mut trial = fit.clone();
+    let index = add(&mut trial, info, ids, layout, type_id)?;
+    let after = esf_dogma_engine::calculate(info, &trial, &options)
+        .violations
+        .unwrap_or_default();
+    let blocking = after.into_iter().find(|v| {
+        structural(&v.rule)
+            && match v.target {
+                crate::Target::Item { index: i } | crate::Target::Charge { index: i } => i == index,
+                crate::Target::Ship => !before.iter().any(|b| b.rule == v.rule),
+            }
+    });
+    match blocking {
+        Some(v) => Err(EditError::DoesNotFit(v.rule)),
+        None => {
+            *fit = trial;
+            Ok(index)
+        }
+    }
 }
