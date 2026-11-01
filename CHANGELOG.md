@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/ullanar/rufa/compare/v0.3.0...v0.4.0) (2026-11-01)
+
+
+### Features
+
+* **app:** drone rows, fits tab and selection-wide charges ([333d562](https://github.com/ullanar/rufa/commit/333d562fd20ec0019969bbb0bafa8d4863b45800))
+* **app:** incoming reps, jam chance, dps range and bomb rows ([1635e52](https://github.com/ullanar/rufa/commit/1635e52a2260f39ec34f0c38501bd83eee6d5998))
+* **app:** remote reps and mining sections, empty rows hidden ([4d60c9c](https://github.com/ullanar/rufa/commit/4d60c9ca95fa2498d823a189227e5cc4342b7431))
+* **sim:** drone bay limits and the stats they feed ([dad1048](https://github.com/ullanar/rufa/commit/dad1048badbedc82683e9e73f533f20ffaa11598))
+* **sim:** incoming reps, ECM jam chance, spooled dps and bombs to kill ([ac9506f](https://github.com/ullanar/rufa/commit/ac9506f3d536587566d7f7bfe09ef212c242b73c))
+* **sim:** remote reps, sustained tank, mining yield and damage split ([3d3cb67](https://github.com/ullanar/rufa/commit/3d3cb67f7350580641d4b25fc9f2f55adf598a68))
+
 ## [0.3.0](https://github.com/ullanar/rufa/compare/v0.2.0...v0.3.0) (2026-11-01)
 
 
