@@ -15,12 +15,15 @@ pub fn view(app: &App) -> El<'_> {
     };
     let tabs = row![
         tab("Ships", LeftTab::Ships),
+        tab("Fits", LeftTab::Fits),
         tab("Market", LeftTab::Market),
         tab("Skills", LeftTab::Character)
     ]
-    .spacing(ui::GAP);
+    .spacing(ui::GAP)
+    .wrap();
     let body = match app.left {
         LeftTab::Ships => ships(app),
+        LeftTab::Fits => fits(app),
         LeftTab::Market => market(app),
         LeftTab::Character => character(app),
     };
@@ -86,12 +89,19 @@ fn ships(app: &App) -> El<'_> {
     let query = app.ship_search.trim().to_lowercase();
     let mut list = column![].spacing(1);
     if !query.is_empty() {
+        let mut hits = 0;
         for group in game.catalog.hull_groups() {
+            let group_matches = group.name.to_lowercase().contains(&query);
             for hull in &group.hulls {
-                if hull.name.to_lowercase().contains(&query) {
-                    list = list.push(list_button(hull.name.clone(), Message::NewFit(hull.id)));
+                if !group_matches && !hull.name.to_lowercase().contains(&query) {
+                    continue;
                 }
+                hits += 1;
+                list = list.push(hull_button(&hull.name, &group.name, hull.id));
             }
+        }
+        if hits == 0 {
+            list = list.push(text("No matches").size(ui::SMALL).color(theme::FAINT));
         }
     } else if let Some(group_id) = app.ship_group {
         if let Some(group) = game.catalog.hull_groups().iter().find(|g| g.id == group_id) {
@@ -110,59 +120,222 @@ fn ships(app: &App) -> El<'_> {
         }
     }
 
-    let mut saved = column![
-        row![
-            ui::eyebrow("Saved fits").width(Length::Fill),
-            button(text("Import from Pyfa").size(ui::SMALL))
-                .padding([2, 8])
-                .style(theme::secondary)
-                .on_press(Message::ImportPyfa),
-        ]
-        .align_y(iced::Alignment::Center)
+    column![
+        search("Search hulls and groups", &app.ship_search, Message::ShipSearch),
+        ui::scroll(list).height(Length::Fill),
     ]
-    .spacing(1);
+    .spacing(ui::GAP_ROW)
+    .into()
+}
+
+fn hull_button<'a>(name: &str, group: &str, id: i32) -> El<'a> {
+    button(
+        row![
+            container(
+                text(name.to_string())
+                    .size(ui::BODY)
+                    .wrapping(text::Wrapping::None)
+            )
+            .clip(true)
+            .width(Length::Fill),
+            text(group.to_string())
+                .size(ui::MICRO)
+                .color(theme::MUTED)
+                .wrapping(text::Wrapping::None),
+        ]
+        .spacing(ui::GAP)
+        .align_y(iced::Alignment::Center),
+    )
+    .padding([3, 8])
+    .width(Length::Fill)
+    .style(theme::list_item(false))
+    .on_press(Message::NewFit(id))
+    .into()
+}
+
+fn fits(app: &App) -> El<'_> {
+    let Ok(game) = &app.game else {
+        return ui::muted("No game data loaded").into();
+    };
+    let query = app.fit_search.trim().to_lowercase();
+    let open = |fit: &rufa_store::SavedFit| {
+        app.docs
+            .iter()
+            .any(|d| d.path.as_deref() == Some(fit.path.as_path()))
+    };
+
+    let mut list = column![].spacing(1);
     if app.saved.is_empty() {
-        saved = saved.push(
+        list = list.push(
             text("None yet. Ctrl+S saves the open fit.")
                 .size(ui::SMALL)
                 .color(theme::FAINT),
         );
-    }
-    for fit in &app.saved {
-        let hull = fit.hull.map(|h| app.type_name(h)).unwrap_or("");
-        saved = saved.push(
-            row![
-                button(
-                    row![
-                        text(&fit.name)
-                            .size(ui::BODY)
-                            .wrapping(text::Wrapping::None)
-                            .width(Length::Fill),
-                        text(hull).size(ui::MICRO).color(theme::MUTED),
-                    ]
-                    .spacing(ui::GAP)
-                    .align_y(iced::Alignment::Center),
-                )
-                .padding([3, 8])
-                .width(Length::Fill)
-                .style(theme::list_item(false))
-                .on_press(Message::OpenSaved(fit.path.clone())),
-                button(text("×").size(ui::SMALL))
-                    .padding([3, 5])
-                    .style(theme::ghost)
-                    .on_press(Message::DeleteSaved(fit.path.clone())),
-            ]
-            .align_y(iced::Alignment::Center),
-        );
+    } else if query.is_empty() {
+        for (group_id, group_name, hulls) in fit_tree(app, game) {
+            let folded = app.fits_folded.contains(&group_id);
+            let count = hulls.iter().map(|(_, f)| f.len()).sum::<usize>();
+            list = list.push(fold_button(
+                &group_name,
+                count,
+                folded,
+                Message::ToggleFitGroup(group_id),
+            ));
+            if folded {
+                continue;
+            }
+            for (hull, fits) in hulls {
+                list = list.push(
+                    container(ui::eyebrow(app.type_name(hull))).padding(iced::Padding {
+                        top: 3.0,
+                        right: 2.0,
+                        bottom: 1.0,
+                        left: 10.0,
+                    }),
+                );
+                for fit in fits {
+                    list = list.push(fit_row(fit, open(fit), None, 14.0));
+                }
+            }
+        }
+    } else {
+        let mut hits: Vec<&rufa_store::SavedFit> = app
+            .saved
+            .iter()
+            .filter(|f| {
+                f.name.to_lowercase().contains(&query)
+                    || f.hull
+                        .is_some_and(|h| app.type_name(h).to_lowercase().contains(&query))
+            })
+            .collect();
+        hits.sort_by_key(|f| f.name.to_lowercase());
+        if hits.is_empty() {
+            list = list.push(text("No matches").size(ui::SMALL).color(theme::FAINT));
+        }
+        for fit in hits {
+            let hull = fit.hull.map(|h| app.type_name(h)).unwrap_or("");
+            list = list.push(fit_row(fit, open(fit), Some(hull), 4.0));
+        }
     }
 
+    let head = row![
+        ui::eyebrow("Saved fits").width(Length::Fill),
+        ui::small(app.saved.len().to_string()),
+        button(text("Import from Pyfa").size(ui::SMALL))
+            .padding([2, 8])
+            .style(theme::secondary)
+            .on_press(Message::ImportPyfa),
+    ]
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center);
+
     column![
-        search("Search hulls", &app.ship_search, Message::ShipSearch),
-        ui::scroll(list).height(Length::FillPortion(3)),
-        ui::rule(),
-        container(ui::scroll(saved)).height(Length::FillPortion(2)),
+        search("Search saved fits", &app.fit_search, Message::FitSearch),
+        head,
+        ui::scroll(list).height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
+    .into()
+}
+
+type FitTree<'a> = Vec<(i32, String, Vec<(i32, Vec<&'a rufa_store::SavedFit>)>)>;
+
+fn fit_tree<'a>(app: &'a App, game: &'static rufa_data::Game) -> FitTree<'a> {
+    let mut groups: FitTree<'a> = Vec::new();
+    for fit in &app.saved {
+        let hull = fit.hull.unwrap_or(0);
+        let group_id = game.sde.get_type(hull).map(|t| t.group_id()).unwrap_or(0);
+        let group_name = match group_id {
+            0 => "Unknown hull".to_string(),
+            id => game.catalog.group_name(id).to_string(),
+        };
+        let group = match groups.iter().position(|(id, _, _)| *id == group_id) {
+            Some(i) => &mut groups[i],
+            None => {
+                groups.push((group_id, group_name, Vec::new()));
+                groups.last_mut().unwrap()
+            }
+        };
+        match group.2.iter().position(|(id, _)| *id == hull) {
+            Some(i) => group.2[i].1.push(fit),
+            None => group.2.push((hull, vec![fit])),
+        }
+    }
+    for group in &mut groups {
+        group.2.sort_by_key(|(hull, _)| app.type_name(*hull));
+        for (_, fits) in &mut group.2 {
+            fits.sort_by_key(|f| f.name.to_lowercase());
+        }
+    }
+    groups.sort_by(|a, b| a.1.cmp(&b.1));
+    groups
+}
+
+fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<'a> {
+    button(
+        row![
+            text(if folded { "▸" } else { "▾" })
+                .size(ui::MICRO)
+                .color(theme::MUTED),
+            container(
+                text(label.to_string())
+                    .size(ui::BODY)
+                    .font(theme::UI_MEDIUM)
+                    .wrapping(text::Wrapping::None)
+            )
+            .clip(true)
+            .width(Length::Fill),
+            text(count.to_string()).size(ui::MICRO).color(theme::MUTED),
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
+    )
+    .padding([3, 8])
+    .width(Length::Fill)
+    .style(theme::list_item(false))
+    .on_press(msg)
+    .into()
+}
+
+fn fit_row<'a>(
+    fit: &'a rufa_store::SavedFit,
+    open: bool,
+    hull: Option<&'a str>,
+    indent: f32,
+) -> El<'a> {
+    let color = if open { theme::ACCENT } else { theme::TEXT };
+    let mut line = row![
+        container(
+            text(&fit.name)
+                .size(ui::BODY)
+                .color(color)
+                .wrapping(text::Wrapping::None)
+        )
+        .clip(true)
+        .width(Length::Fill)
+    ]
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center);
+    if let Some(hull) = hull {
+        line = line.push(text(hull).size(ui::MICRO).color(theme::MUTED));
+    }
+    row![
+        button(line)
+            .padding(iced::Padding {
+                top: 3.0,
+                right: 8.0,
+                bottom: 3.0,
+                left: indent,
+            })
+            .width(Length::Fill)
+            .style(theme::list_item(false))
+            .on_press(Message::OpenSaved(fit.path.clone())),
+        button(text("×").size(ui::SMALL))
+            .padding([3, 5])
+            .style(theme::ghost)
+            .on_press(Message::DeleteSaved(fit.path.clone())),
+    ]
+    .align_y(iced::Alignment::Center)
     .into()
 }
 
@@ -378,11 +551,14 @@ fn character(app: &App) -> El<'_> {
             list = list.push(
                 container(
                     row![
-                        text(&skill.name)
-                            .size(ui::SMALL)
-                            .color(theme::TEXT)
-                            .width(Length::Fill)
-                            .wrapping(text::Wrapping::None),
+                        container(
+                            text(&skill.name)
+                                .size(ui::SMALL)
+                                .color(theme::TEXT)
+                                .wrapping(text::Wrapping::None)
+                        )
+                        .clip(true)
+                        .width(Length::Fill),
                         levels
                     ]
                     .spacing(ui::GAP)

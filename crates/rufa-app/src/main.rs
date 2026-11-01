@@ -14,6 +14,7 @@ use rufa_data::Game;
 use rufa_data::icons::Kind;
 use rufa_sim::attrs::AttrIds;
 use rufa_sim::document::Document;
+use rufa_sim::drones;
 use rufa_sim::projection::Projected;
 use rufa_sim::{Fit, State, edit};
 use rufa_store::{Character, ImplantSet, PriceCache, SavedFit, Settings, TargetProfile};
@@ -53,6 +54,7 @@ pub enum Pane {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeftTab {
     Ships,
+    Fits,
     Market,
     Character,
 }
@@ -150,6 +152,8 @@ pub enum Message {
     LeftTab(LeftTab),
     ShipSearch(String),
     ShipGroup(Option<i32>),
+    FitSearch(String),
+    ToggleFitGroup(i32),
     NewFit(i32),
     OpenSaved(PathBuf),
     MarketSearch(String),
@@ -164,6 +168,7 @@ pub enum Message {
     RemoveItem(usize),
     SelectItem(Option<usize>),
     HoverItem(Option<usize>),
+    HoverTab(Option<usize>),
     OpenMenu(usize),
     CloseMenu,
     CursorMoved(iced::Point),
@@ -176,6 +181,8 @@ pub enum Message {
     MenuFill,
     MenuMutate(i32),
     Quantity(usize, u32),
+    DroneLaunched(i32, u32),
+    DroneCarried(i32, u32),
     LoadCharge(usize, Option<i32>),
     DamageProfile(DamagePreset),
     ProjectMode(bool),
@@ -258,6 +265,8 @@ pub struct App {
     pub left: LeftTab,
     pub ship_search: String,
     pub ship_group: Option<i32>,
+    pub fit_search: String,
+    pub fits_folded: std::collections::BTreeSet<i32>,
     pub saved: Vec<SavedFit>,
     pub market_search: String,
     pub market_group: Option<i32>,
@@ -269,6 +278,7 @@ pub struct App {
     pub cursor: iced::Point,
     pub menu: Option<(usize, iced::Point)>,
     pub hovered_item: Option<usize>,
+    pub hovered_tab: Option<usize>,
     pub status: String,
     pub panes: pane_grid::State<Pane>,
     pub characters: Vec<Character>,
@@ -330,6 +340,8 @@ impl App {
             left: LeftTab::Ships,
             ship_search: String::new(),
             ship_group: None,
+            fit_search: String::new(),
+            fits_folded: Default::default(),
             saved: Vec::new(),
             market_search: String::new(),
             market_group: None,
@@ -341,6 +353,7 @@ impl App {
             cursor: iced::Point::ORIGIN,
             menu: None,
             hovered_item: None,
+            hovered_tab: None,
             status: String::new(),
             panes,
             characters,
@@ -389,6 +402,8 @@ impl App {
                 self.menu = Some((0, iced::Point::new(120.0, 160.0)));
             } else if arg == "--market" {
                 self.left = LeftTab::Market;
+            } else if arg == "--fits" {
+                self.left = LeftTab::Fits;
             } else if arg == "--skills" {
                 self.left = LeftTab::Character;
             } else if arg == "--graph" {
@@ -454,6 +469,7 @@ impl App {
         } else {
             rufa_sim::format::eft::load_eft(&info, text).map_err(|e| format!("{e:?}"))?
         };
+        fit.character.skills = self.skills(game);
         rufa_sim::format::post_load(&game.info(), &mut fit);
         Ok(fit)
     }
@@ -689,6 +705,12 @@ impl App {
             Message::LeftTab(tab) => self.left = tab,
             Message::ShipSearch(s) => self.ship_search = s,
             Message::ShipGroup(g) => self.ship_group = g,
+            Message::FitSearch(s) => self.fit_search = s,
+            Message::ToggleFitGroup(id) => {
+                if !self.fits_folded.remove(&id) {
+                    self.fits_folded.insert(id);
+                }
+            }
             Message::NewFit(type_id) => {
                 if let Some((game, _)) = self.ready() {
                     let fit = edit::new_fit(type_id, self.skills(game));
@@ -729,6 +751,12 @@ impl App {
                 if self.docs.is_empty() {
                     self.status = "Open a fit first: pick a hull on the Ships tab".to_string();
                 } else if let Some((game, ids)) = self.ready() {
+                    if rufa_sim::place::placement(&game.info(), &ids, type_id)
+                        == Some(rufa_sim::place::Placement::Drone)
+                    {
+                        self.add_drone(type_id);
+                        return Task::batch([self.fetch_prices(), self.fetch_icons()]);
+                    }
                     let targets = self.charge_targets(game, ids, type_id);
                     if targets.is_empty() {
                         self.edit_active(|fit, layout| {
@@ -745,7 +773,13 @@ impl App {
                 }
             }
             Message::LoadCharge(i, charge) => {
-                self.edit_active(|fit, _| edit::set_charge(fit, i, charge))
+                let targets = self.charge_group(i, charge);
+                self.edit_active(move |fit, _| {
+                    for t in targets {
+                        edit::set_charge(fit, t, charge)?;
+                    }
+                    Ok(())
+                });
             }
             Message::DamageProfile(preset) => self.edit_active(|fit, _| {
                 fit.environment.damage_profile = preset.profile();
@@ -791,11 +825,17 @@ impl App {
                 fit.ship.mode = mode;
                 Ok(())
             }),
-            Message::ReplaceItem(i, type_id) => self.edit_active(|fit, _| {
-                let item = fit.items.get_mut(i).ok_or(edit::EditError::NoSuchItem(i))?;
-                item.type_id = type_id;
-                Ok(())
-            }),
+            Message::ReplaceItem(i, type_id) => {
+                let targets = self.variant_targets(type_id, self.state_targets(i));
+                self.edit_active(move |fit, _| {
+                    for t in targets {
+                        let item = fit.items.get_mut(t).ok_or(edit::EditError::NoSuchItem(t))?;
+                        item.type_id = type_id;
+                        item.mutation = None;
+                    }
+                    Ok(())
+                });
+            }
             Message::Mutate(i, mutaplasmid) => {
                 if let Some((game, _)) = self.ready() {
                     self.edit_active(|fit, _| {
@@ -1010,7 +1050,7 @@ impl App {
                 });
             }
             Message::MenuVariant(type_id) => {
-                let targets = self.menu_targets(true);
+                let targets = self.variant_targets(type_id, self.menu_targets(true));
                 self.menu = None;
                 self.edit_active(|fit, _| {
                     for i in targets {
@@ -1066,6 +1106,18 @@ impl App {
                     return Task::none();
                 };
                 self.menu = None;
+                let drone = self
+                    .docs
+                    .get(self.active)
+                    .and_then(|d| d.doc.fit.items.get(i))
+                    .filter(|it| it.slot == rufa_sim::Slot::DroneBay)
+                    .map(|it| it.type_id);
+                if let Some(type_id) = drone {
+                    if let Some((stack, room)) = self.drone_state(type_id) {
+                        self.set_drones(type_id, drones::plan_fill(stack, room), stack);
+                    }
+                    return Task::batch([self.fetch_prices(), self.fetch_icons()]);
+                }
                 if let Some((game, ids)) = self.ready() {
                     self.edit_active(|fit, layout| {
                         let Some(item) = fit.items.get(i).cloned() else {
@@ -1111,7 +1163,18 @@ impl App {
                 });
             }
             Message::HoverItem(i) => self.hovered_item = i,
+            Message::HoverTab(i) => self.hovered_tab = i,
             Message::Quantity(i, q) => self.edit_active(|fit, _| edit::set_quantity(fit, i, q)),
+            Message::DroneLaunched(type_id, want) => {
+                if let Some((stack, room)) = self.drone_state(type_id) {
+                    self.set_drones(type_id, drones::plan_launched(stack, room, want), stack);
+                }
+            }
+            Message::DroneCarried(type_id, want) => {
+                if let Some((stack, room)) = self.drone_state(type_id) {
+                    self.set_drones(type_id, drones::plan_total(stack, room, want), stack);
+                }
+            }
             Message::SkillLevel(level) => {
                 return self.update(Message::ChooseCharacter(CharChoice::All(level)));
             }
@@ -1462,21 +1525,120 @@ impl App {
         Task::batch([self.fetch_prices(), self.fetch_icons()])
     }
 
-    fn charge_targets(&self, game: &'static Game, ids: AttrIds, type_id: i32) -> Vec<usize> {
+    fn drone_state(&self, type_id: i32) -> Option<(drones::Stack, drones::Room)> {
+        let (game, ids) = self.ready()?;
+        let doc = self.docs.get(self.active)?;
+        Some((
+            drones::stack(&doc.doc.fit, type_id),
+            drones::room(&game.info(), &ids, &doc.doc.calc, type_id),
+        ))
+    }
+
+    fn set_drones(&mut self, type_id: i32, wanted: drones::Stack, before: drones::Stack) {
+        if wanted == before {
+            return;
+        }
+        self.edit_active(move |fit, _| {
+            drones::set_stack(fit, type_id, wanted);
+            Ok(())
+        });
+    }
+
+    fn add_drone(&mut self, type_id: i32) {
+        let Some((stack, room)) = self.drone_state(type_id) else {
+            return;
+        };
+        let wanted = if stack.total() == 0 {
+            drones::plan_pack(stack, room)
+        } else {
+            drones::plan_total(stack, room, stack.total() + 1)
+        };
+        if wanted == stack {
+            self.status = self.no_drone_room(type_id);
+            return;
+        }
+        self.set_drones(type_id, wanted, stack);
+    }
+
+    fn no_drone_room(&self, type_id: i32) -> String {
+        let Some((_, ids)) = self.ready() else {
+            return String::new();
+        };
+        let Some(doc) = self.docs.get(self.active) else {
+            return String::new();
+        };
+        let load = drones::load(&ids, &doc.doc.calc);
+        if load.bay_total <= 0.0 {
+            return format!(
+                "{} has no drone bay",
+                self.type_name(doc.doc.fit.ship.type_id)
+            );
+        }
+        format!(
+            "No room for a {}: the drone bay holds {:.1} of {:.1} m3",
+            self.type_name(type_id),
+            load.bay_used,
+            load.bay_total
+        )
+    }
+
+    fn takes_charge(&self, ids: AttrIds, charge: i32) -> impl Fn(&usize) -> bool + '_ {
+        let info = self.game.as_ref().ok().map(|game| game.info());
+        move |i: &usize| {
+            let (Some(info), Some(doc)) = (&info, self.docs.get(self.active)) else {
+                return false;
+            };
+            let Some(item) = doc.doc.fit.items.get(*i) else {
+                return false;
+            };
+            rufa_sim::place::Rack::of_slot(item.slot).is_some()
+                && rufa_sim::place::accepts_charge(info, &ids, item.type_id, charge)
+        }
+    }
+
+    fn charge_targets(&self, _game: &'static Game, ids: AttrIds, type_id: i32) -> Vec<usize> {
         let Some(doc) = self.docs.get(self.active) else {
             return Vec::new();
         };
-        let info = game.info();
-        let accepts = |i: usize| {
-            let item = &doc.doc.fit.items[i];
-            rufa_sim::place::Rack::of_slot(item.slot).is_some()
-                && rufa_sim::place::accepts_charge(&info, &ids, item.type_id, type_id)
-        };
-        if let Some(i) = self.selected_item.filter(|i| *i < doc.doc.fit.items.len()) {
-            return if accepts(i) { vec![i] } else { Vec::new() };
+        let takes = self.takes_charge(ids, type_id);
+        let chosen: Vec<usize> = self.selected.iter().copied().filter(&takes).collect();
+        if !chosen.is_empty() || !self.selected.is_empty() {
+            return chosen;
         }
-        (0..doc.doc.fit.items.len())
-            .filter(|i| accepts(*i))
+        (0..doc.doc.fit.items.len()).filter(&takes).collect()
+    }
+
+    fn charge_group(&self, i: usize, charge: Option<i32>) -> Vec<usize> {
+        let targets = self.state_targets(i);
+        let Some(ids) = self.ids else {
+            return targets;
+        };
+        let Some(charge) = charge else {
+            return targets;
+        };
+        let takes = self.takes_charge(ids, charge);
+        let chosen: Vec<usize> = targets.iter().copied().filter(&takes).collect();
+        if chosen.is_empty() { vec![i] } else { chosen }
+    }
+
+    fn variant_targets(&self, type_id: i32, from: Vec<usize>) -> Vec<usize> {
+        let (Ok(game), Some(doc)) = (&self.game, self.docs.get(self.active)) else {
+            return from;
+        };
+        let Some(wanted) = game.sde.get_type(type_id) else {
+            return from;
+        };
+        let kind = (wanted.market_group_id(), wanted.group_id());
+        from.into_iter()
+            .filter(|i| {
+                doc.doc
+                    .fit
+                    .items
+                    .get(*i)
+                    .and_then(|it| game.sde.get_type(it.type_id))
+                    .map(|t| (t.market_group_id(), t.group_id()))
+                    == Some(kind)
+            })
             .collect()
     }
 
@@ -1806,21 +1968,15 @@ mod tests {
         let _ = app.update(Message::AddItem(ac));
         let _ = app.update(Message::AddItem(ac));
         let _ = app.update(Message::AddItem(hobgoblin));
-        let _ = app.update(Message::AddItem(hobgoblin));
+        assert!(app.status.contains("no drone bay"), "{}", app.status);
         let emp = type_id(&app, "EMP S");
         let _ = app.update(Message::AddItem(emp));
         let doc = &app.docs[0].doc;
-        assert_eq!(doc.fit.items.len(), 4, "{:?}", doc.fit.items);
+        assert_eq!(doc.fit.items.len(), 3, "{:?}", doc.fit.items);
         assert!(doc.fit.items[1].charge.is_some() && doc.fit.items[2].charge.is_some());
         assert!(doc.fit.items[0].charge.is_none());
         assert!(doc.stats.resources.cpu_used > base_cpu);
         assert!(doc.stats.offense.dps > 0.0);
-        assert!(
-            doc.stats.offense.drone_dps > 0.0,
-            "drones {:?}",
-            doc.fit.items[3]
-        );
-        assert_eq!(doc.fit.items[3].quantity, 2);
 
         let _ = app.update(Message::CycleState(1));
         assert_eq!(app.docs[0].doc.fit.items[1].state, State::Online);
@@ -1832,10 +1988,85 @@ mod tests {
         assert_eq!(app.docs[0].doc.fit.items[1].state, State::Online);
 
         let _ = app.update(Message::RemoveItem(0));
-        assert_eq!(app.docs[0].doc.fit.items.len(), 3);
+        assert_eq!(app.docs[0].doc.fit.items.len(), 2);
 
         let _ = app.update(Message::SkillLevel(0));
         assert!(app.docs[0].doc.stats.offense.dps < dps_online);
+    }
+
+    #[test]
+    fn an_imported_fit_launches_the_drones_the_pilot_can_fly() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Vexor, imported]\n\nHobgoblin II x5\nHammerhead II x5\nOgre II x1\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        assert_eq!(app.docs.len(), 1, "{}", app.status);
+        let fit = &app.docs[0].doc.fit;
+        let hobgoblin = type_id(&app, "Hobgoblin II");
+        let hammerhead = type_id(&app, "Hammerhead II");
+        let ogre = type_id(&app, "Ogre II");
+        assert_eq!(drones::stack(fit, ogre).launched, 1, "the ogre hits hardest");
+        assert_eq!(drones::stack(fit, hammerhead).launched, 4);
+        assert_eq!(drones::stack(fit, hobgoblin).launched, 0);
+        let r = &app.docs[0].doc.stats.resources;
+        assert_eq!((r.drones_active, r.drones_max), (5.0, 5.0));
+        assert_eq!(r.drone_bandwidth_used, 65.0);
+        assert!(app.docs[0].doc.stats.offense.drone_dps > 0.0);
+    }
+
+    #[test]
+    fn drones_arrive_as_a_pack_and_stay_within_the_limits() {
+        let Some(mut app) = app() else { return };
+        let vexor = type_id(&app, "Vexor");
+        let hobgoblin = type_id(&app, "Hobgoblin II");
+        let hammerhead = type_id(&app, "Hammerhead II");
+        let _ = app.update(Message::NewFit(vexor));
+
+        let _ = app.update(Message::AddItem(hobgoblin));
+        let stack = drones::stack(&app.docs[0].doc.fit, hobgoblin);
+        assert_eq!(stack, drones::Stack { launched: 5, stowed: 0 });
+        let r = &app.docs[0].doc.stats.resources;
+        assert_eq!((r.drones_active, r.drones_max), (5.0, 5.0));
+        assert_eq!((r.drone_bandwidth_used, r.drone_bandwidth_total), (25.0, 75.0));
+        assert_eq!((r.drone_bay_used, r.drone_bay_total), (25.0, 125.0));
+        assert!(app.docs[0].doc.calc.violations.as_deref().unwrap_or(&[]).is_empty());
+
+        let _ = app.update(Message::AddItem(hobgoblin));
+        assert_eq!(
+            drones::stack(&app.docs[0].doc.fit, hobgoblin),
+            drones::Stack { launched: 5, stowed: 1 }
+        );
+
+        let _ = app.update(Message::DroneLaunched(hobgoblin, 3));
+        assert_eq!(
+            drones::stack(&app.docs[0].doc.fit, hobgoblin),
+            drones::Stack { launched: 3, stowed: 3 }
+        );
+
+        let _ = app.update(Message::AddItem(hammerhead));
+        assert_eq!(
+            drones::stack(&app.docs[0].doc.fit, hammerhead),
+            drones::Stack { launched: 2, stowed: 0 }
+        );
+        assert_eq!(app.docs[0].doc.stats.resources.drones_active, 5.0);
+        assert!(app.docs[0].doc.calc.violations.as_deref().unwrap_or(&[]).is_empty());
+
+        let _ = app.update(Message::DroneLaunched(hammerhead, 5));
+        assert_eq!(
+            drones::stack(&app.docs[0].doc.fit, hammerhead),
+            drones::Stack { launched: 2, stowed: 0 },
+            "the pilot cap stops the launch"
+        );
+
+        let _ = app.update(Message::DroneCarried(hobgoblin, 40));
+        let stack = drones::stack(&app.docs[0].doc.fit, hobgoblin);
+        assert_eq!(stack.total(), 21, "the bay holds 125 m3 less two hammerheads");
+        assert_eq!(stack.launched, 3);
+
+        let _ = app.update(Message::DroneCarried(hobgoblin, 0));
+        assert!(drones::first_index(&app.docs[0].doc.fit, hobgoblin).is_none());
+        let r = &app.docs[0].doc.stats.resources;
+        assert_eq!(r.drone_bay_used, 20.0);
+        assert!(!r.cargo_used.is_sign_negative(), "an empty hold reads zero");
     }
 
     #[test]
@@ -2274,6 +2505,51 @@ mod tests {
     }
 
     #[test]
+    fn the_right_pane_follows_the_selection_and_skips_the_wrong_modules() {
+        let Some(mut app) = app() else { return };
+        let kestrel = type_id(&app, "Kestrel");
+        let launcher = type_id(&app, "Rocket Launcher II");
+        let launcher_t1 = type_id(&app, "Rocket Launcher I");
+        let extender = type_id(&app, "Small Shield Extender II");
+        let navy = type_id(&app, "Caldari Navy Mjolnir Rocket");
+        let plain = type_id(&app, "Mjolnir Rocket");
+        let _ = app.update(Message::NewFit(kestrel));
+        for _ in 0..4 {
+            let _ = app.update(Message::AddItem(launcher));
+        }
+        let _ = app.update(Message::AddItem(extender));
+
+        let _ = app.update(Message::SelectItem(Some(0)));
+        app.modifiers = Modifiers::SHIFT;
+        let _ = app.update(Message::SelectItem(Some(4)));
+        app.modifiers = Modifiers::empty();
+        assert_eq!(app.selected.len(), 5);
+
+        let _ = app.update(Message::LoadCharge(0, Some(navy)));
+        let fit = &app.docs[0].doc.fit;
+        assert!(
+            (0..4).all(|i| fit.items[i].charge.as_ref().map(|c| c.type_id) == Some(navy)),
+            "every selected launcher takes the charge"
+        );
+        assert!(fit.items[4].charge.is_none(), "the extender takes no rocket");
+
+        let _ = app.update(Message::ReplaceItem(0, launcher_t1));
+        let fit = &app.docs[0].doc.fit;
+        assert!((0..4).all(|i| fit.items[i].type_id == launcher_t1));
+        assert_eq!(fit.items[4].type_id, extender, "a swap stays within the kind");
+
+        let _ = app.update(Message::SelectItem(Some(2)));
+        let _ = app.update(Message::AddItem(plain));
+        let fit = &app.docs[0].doc.fit;
+        assert_eq!(fit.items[2].charge.as_ref().map(|c| c.type_id), Some(plain));
+        assert_eq!(fit.items[0].charge.as_ref().map(|c| c.type_id), Some(navy));
+
+        let _ = app.update(Message::LoadCharge(2, None));
+        assert!(app.docs[0].doc.fit.items[2].charge.is_none());
+        assert!(app.docs[0].doc.fit.items[0].charge.is_some());
+    }
+
+    #[test]
     fn selection_and_context_menu_apply_to_many() {
         let Some(mut app) = app() else { return };
         let kestrel = type_id(&app, "Kestrel");
@@ -2400,3 +2676,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
