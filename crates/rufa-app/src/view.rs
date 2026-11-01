@@ -3,7 +3,7 @@ mod fit;
 mod graph;
 mod stats;
 
-use iced::widget::{button, column, container, pane_grid, row, space, text, text_input};
+use iced::widget::{button, column, container, pane_grid, row, space, stack, text, text_input};
 use iced::{Element, Length};
 
 use crate::theme;
@@ -32,7 +32,7 @@ pub fn root(app: &App) -> Element<'_, Message> {
     .min_size(220)
     .on_resize(8, Message::PaneResized);
 
-    column![
+    let body = column![
         toolbar(app),
         container(grid)
             .width(Length::Fill)
@@ -41,7 +41,124 @@ pub fn root(app: &App) -> Element<'_, Message> {
         container(fit::violations(app)).padding([0.0, ui::GAP]),
         status_bar(app),
     ]
-    .spacing(ui::GAP)
+    .spacing(ui::GAP);
+    if app.update_prompt {
+        return stack![body, update_window(app)].into();
+    }
+    body.into()
+}
+
+fn update_window(app: &App) -> El<'_> {
+    let installed = env!("CARGO_PKG_VERSION");
+    let mut card = column![].spacing(ui::GAP_ROW).max_width(380);
+    match &app.app_update {
+        Some(release) => {
+            card = card.push(ui::eyebrow("Update available"));
+            card = card.push(fact("Installed", format!("v{installed}")));
+            card = card.push(fact("Available", release.tag.clone()));
+            if !release.published.is_empty() {
+                card = card.push(fact("Released", release.published.clone()));
+            }
+            card = card.push(notes_link("Read what changed"));
+        }
+        None => {
+            card = card.push(ui::eyebrow("No update"));
+            card = card.push(fact("Installed", format!("v{installed}")));
+            card = card.push(ui::small("This is the latest release."));
+            card = card.push(notes_link("Read what it carries"));
+        }
+    }
+    if let Some(error) = &app.update_error {
+        card = card.push(ui::rule());
+        card = card.push(
+            text(error.clone())
+                .size(ui::SMALL)
+                .color(theme::DANGER_TEXT),
+        );
+    }
+    card = card.push(ui::rule());
+    card = card.push(update_buttons(app));
+    container(
+        container(card)
+            .padding(ui::PAD * 2.0)
+            .style(theme::card)
+            .max_width(420),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .align_x(iced::alignment::Horizontal::Center)
+    .align_y(iced::alignment::Vertical::Center)
+    .style(theme::scrim)
+    .into()
+}
+
+fn notes_link<'a>(label: &'a str) -> El<'a> {
+    button(text(label).size(ui::SMALL))
+        .padding([2, 0])
+        .style(theme::link)
+        .on_press(Message::ReleaseNotes)
+        .into()
+}
+
+fn fact<'a>(name: &'a str, value: String) -> El<'a> {
+    row![ui::small(name).width(Length::Fill), ui::value(value)]
+        .align_y(iced::Alignment::Center)
+        .into()
+}
+
+fn update_buttons(app: &App) -> El<'_> {
+    let mut line = row![].spacing(ui::GAP);
+    if let Some(tag) = &app.update_ready {
+        line = line.push(
+            button(text(format!("Restart into {tag}")).size(ui::SMALL))
+                .padding([3, 10])
+                .style(theme::primary)
+                .on_press(Message::Restart),
+        );
+        line = line.push(
+            button(text("Later").size(ui::SMALL))
+                .padding([3, 10])
+                .style(theme::ghost)
+                .on_press(Message::UpdateLater),
+        );
+        return line.into();
+    }
+    if app.app_update.is_some() {
+        let now = button(
+            text(if app.update_busy {
+                "Downloading"
+            } else {
+                "Update now"
+            })
+            .size(ui::SMALL),
+        )
+        .padding([3, 10])
+        .style(theme::primary);
+        line = line.push(if app.update_busy {
+            now
+        } else {
+            now.on_press(Message::UpdateNow)
+        });
+        line = line.push(
+            button(text("Next time").size(ui::SMALL))
+                .padding([3, 10])
+                .style(theme::secondary)
+                .on_press(Message::UpdateLater),
+        );
+        line = line.push(
+            button(text("Skip this version").size(ui::SMALL))
+                .padding([3, 10])
+                .style(theme::ghost)
+                .on_press(Message::UpdateSkip),
+        );
+        return line.into();
+    }
+    line.push(
+        button(text("Close").size(ui::SMALL))
+            .padding([3, 10])
+            .style(theme::secondary)
+            .on_press(Message::UpdateLater),
+    )
     .into()
 }
 
@@ -304,6 +421,12 @@ fn status_bar(app: &App) -> El<'_> {
             .padding([1, 7])
             .style(theme::ghost)
             .on_press(Message::UiScale(scale + 0.1)),
+    );
+    bar = bar.push(
+        button(text("Check for updates").size(ui::SMALL))
+            .padding([2, 8])
+            .style(theme::ghost)
+            .on_press(Message::CheckUpdate),
     );
     if let Some(tag) = &app.sde_update {
         bar = bar.push(

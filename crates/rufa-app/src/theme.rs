@@ -137,6 +137,13 @@ fn boxed(background: Color, line: Option<Color>, radius: f32) -> container::Styl
     }
 }
 
+pub fn scrim(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+        ..container::Style::default()
+    }
+}
+
 pub fn pane(_theme: &Theme) -> container::Style {
     boxed(BASE, None, 6.0)
 }
@@ -240,6 +247,14 @@ pub fn bare(_theme: &Theme, _status: button::Status) -> button::Style {
         background: None,
         text_color: TEXT,
         ..button::Style::default()
+    }
+}
+
+pub fn link(_theme: &Theme, status: button::Status) -> button::Style {
+    match status {
+        button::Status::Hovered => flat(None, rgb(0x6FD0EE), None, 0.0),
+        button::Status::Disabled => flat(None, DISABLED, None, 0.0),
+        _ => flat(None, ACCENT, None, 0.0),
     }
 }
 

@@ -124,7 +124,7 @@ pub fn login(client_id: &str) -> Result<Pilot, String> {
         challenge(&verifier),
         state
     );
-    open_browser(&url)?;
+    crate::open_browser(&url)?;
 
     listener.set_nonblocking(false).ok();
     let (mut stream, _) = listener.accept().map_err(|e| e.to_string())?;
@@ -189,26 +189,6 @@ fn query_param(request: &str, key: &str) -> Option<String> {
             .filter(|(k, _)| *k == key)
             .map(|(_, v)| v.to_string())
     })
-}
-
-fn open_browser(url: &str) -> Result<(), String> {
-    let mut command = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", "", url]);
-        c
-    } else if cfg!(target_os = "macos") {
-        let mut c = std::process::Command::new("open");
-        c.arg(url);
-        c
-    } else {
-        let mut c = std::process::Command::new("xdg-open");
-        c.arg(url);
-        c
-    };
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("cannot open a browser: {e}"))
 }
 
 fn fetch_name(character_id: i64) -> Result<String, String> {
