@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/ullanar/rufa/compare/v0.5.0...v0.6.0) (2026-11-01)
+
+
+### Features
+
+* **app:** a fit opens in front of the tabs already there ([5768662](https://github.com/ullanar/rufa/commit/5768662e0c2d163f343d22c87f3834545534537c))
+* **app:** click an empty slot to search the market for that rack ([ce72981](https://github.com/ullanar/rufa/commit/ce72981f868f5608d877539543ecb3a172745c77))
+* **app:** fold a stat section, its headline stays ([22eebcf](https://github.com/ullanar/rufa/commit/22eebcf39f8aa9f1d74e52a553c6e8a8d70c473e))
+* **app:** one unit toggle and one capacitor verdict in the stats pane ([b9dca61](https://github.com/ullanar/rufa/commit/b9dca61d73405a67f4c04736d62db920d8e749ff))
+* **app:** tell the fit price from the price in the head ([d734e4f](https://github.com/ullanar/rufa/commit/d734e4f3557f7b81154c0714dd9103a8dda697c5))
+* **app:** the loaded charge shows its icon ([2362118](https://github.com/ullanar/rufa/commit/23621185de717fd6cbc35cd039c5bfb4701aa1eb))
+* **app:** the saved fits read as a tree, with copy and delete on the row ([9c1697e](https://github.com/ullanar/rufa/commit/9c1697ec050e7acbfd304b179d71df486a57585b))
+* **app:** type a cargo or drone count instead of clicking plus ([abd4b45](https://github.com/ullanar/rufa/commit/abd4b453c28d07312aeaecfccf10caf225d0ffa6))
+* **app:** type icons in the ship, saved fit and market lists ([2ef76fb](https://github.com/ullanar/rufa/commit/2ef76fbd438112d5de8d4fa697a2d94b0dae2f9e))
+* stow anything in the cargo hold, where it counts for nothing ([ae76742](https://github.com/ullanar/rufa/commit/ae76742f6e09732453433c5c1d68c6e958a174e1))
+
+
+### Bug Fixes
+
+* **app:** a counted row names the item without repeating the count ([e9ba7c4](https://github.com/ullanar/rufa/commit/e9ba7c4de014b1b915eddb3755bea32c2a86bfe6))
+
 ## [0.5.0](https://github.com/ullanar/rufa/compare/v0.4.0...v0.5.0) (2026-11-01)
 
 
