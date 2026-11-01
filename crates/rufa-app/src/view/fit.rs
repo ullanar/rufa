@@ -1,5 +1,6 @@
 use iced::widget::{
-    button, column, container, image, mouse_area, pick_list, row, scrollable, space, text, tooltip,
+    button, column, container, image, mouse_area, pick_list, pin, row, scrollable, space, stack,
+    text, tooltip,
 };
 use iced::{Color, Length};
 use rufa_data::icons::Kind;
@@ -34,15 +35,38 @@ pub fn view(app: &App) -> El<'_> {
         );
     }
     let body: El<'_> = match app.docs.get(app.active) {
-        Some(doc) => column![
-            scrollable(slots(app, doc))
-                .style(theme::scroll)
-                .height(Length::Fill),
-            violations(app, doc),
-        ]
-        .spacing(ui::GAP_ROW)
-        .height(Length::Fill)
-        .into(),
+        Some(doc) => {
+            let list = mouse_area(
+                scrollable(slots(app, doc))
+                    .style(theme::scroll)
+                    .height(Length::Fill),
+            )
+            .on_move(Message::CursorMoved);
+            let mut layers: Vec<El<'_>> = vec![list.into()];
+            if let Some((i, at)) = app.menu
+                && i < doc.doc.fit.items.len()
+            {
+                layers.push(
+                    mouse_area(space().width(Length::Fill).height(Length::Fill))
+                        .on_press(Message::CloseMenu)
+                        .on_right_press(Message::CloseMenu)
+                        .into(),
+                );
+                layers.push(
+                    pin(context_menu(app, doc, i))
+                        .x(at.x.min(400.0))
+                        .y(at.y)
+                        .into(),
+                );
+            }
+            column![
+                stack(layers).width(Length::Fill).height(Length::Fill),
+                violations(app, doc),
+            ]
+            .spacing(ui::GAP_ROW)
+            .height(Length::Fill)
+            .into()
+        }
         None => container(
             column![
                 text("No fit open")
@@ -567,13 +591,180 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
             .padding([0, 4])
             .height(ui::ROW)
             .align_y(iced::Alignment::Center)
-            .style(theme::row(selected, app.hovered_item == Some(i)))
+            .style(theme::row(
+                selected || app.selected.contains(&i),
+                app.hovered_item == Some(i),
+            ))
             .width(Length::Fill),
     )
     .on_press(Message::SelectItem(Some(i)))
+    .on_right_press(Message::OpenMenu(i))
     .on_enter(Message::HoverItem(Some(i)))
     .on_exit(Message::HoverItem(None))
     .into()
+}
+
+fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize) -> El<'a> {
+    let item = &doc.doc.fit.items[i];
+    let name = app.type_name(item.type_id).to_string();
+    let count = app.selected.len().max(1);
+    let title = if count > 1 {
+        format!("{count} items selected")
+    } else {
+        name.clone()
+    };
+    let mut col = column![
+        text(title)
+            .size(ui::BODY)
+            .font(theme::UI_MEDIUM)
+            .color(theme::TEXT)
+    ]
+    .spacing(ui::GAP);
+    let chip = |label: String, on: bool, msg: Message| {
+        button(text(label).size(ui::SMALL))
+            .padding([2, 7])
+            .style(theme::chip(on))
+            .on_press(msg)
+    };
+    let entry = |label: String, msg: Message| {
+        button(text(label).size(ui::BODY).width(Length::Fill))
+            .padding([3, 8])
+            .width(Length::Fill)
+            .style(theme::list_item(false))
+            .on_press(msg)
+    };
+    let is_module = Rack::of_slot(item.slot).is_some();
+    if let (Ok(game), Some(ids)) = (&app.game, app.ids)
+        && is_module
+    {
+        let info = game.info();
+        let mut charges = row![].spacing(3);
+        let mut any = false;
+        for group in rufa_sim::place::charge_groups(&info, &ids, item.type_id) {
+            for charge in game.catalog.charges_in_group(group) {
+                if !rufa_sim::place::accepts_charge(&info, &ids, item.type_id, charge.id) {
+                    continue;
+                }
+                any = true;
+                let loaded = item.charge.as_ref().is_some_and(|c| c.type_id == charge.id);
+                charges = charges.push(chip(
+                    charge.name.clone(),
+                    loaded,
+                    Message::MenuCharge(Some(charge.id)),
+                ));
+            }
+        }
+        if any {
+            charges = charges.push(chip(
+                "none".to_string(),
+                item.charge.is_none(),
+                Message::MenuCharge(None),
+            ));
+            col = col.push(ui::label("CHARGE"));
+            col = col.push(charges.wrap());
+        }
+    }
+    col = col.push(ui::rule());
+    col = col.push(entry(
+        format!("{} Stats", ui::clip(&name, 28)),
+        Message::CloseMenu,
+    ));
+    col = col.push(entry("Market Group".to_string(), Message::MenuMarketJump));
+    col = col.push(entry(
+        if count > 1 {
+            format!("Remove {count} items")
+        } else {
+            "Remove".to_string()
+        },
+        Message::MenuRemove,
+    ));
+    col = col.push(entry(
+        "Remove All Similar".to_string(),
+        Message::MenuRemoveSimilar,
+    ));
+    if let Ok(game) = &app.game
+        && is_module
+    {
+        if let Some(ty) = game.sde.get_type(item.type_id) {
+            let variants = game.catalog.variations(ty.market_group_id(), ty.group_id());
+            if variants.len() > 1 {
+                col = col.push(ui::rule());
+                col = col.push(ui::label("VARIATIONS"));
+                let mut line = row![].spacing(3);
+                for v in variants {
+                    line = line.push(chip(
+                        v.name.clone(),
+                        v.id == item.type_id,
+                        Message::MenuVariant(v.id),
+                    ));
+                }
+                col = col.push(line.wrap());
+            }
+        }
+        let base = item
+            .mutation
+            .as_ref()
+            .map(|m| m.base)
+            .unwrap_or(item.type_id);
+        let plasmids = rufa_sim::edit::mutaplasmids_for(&game.sde, base);
+        if !plasmids.is_empty() {
+            col = col.push(ui::label("APPLY MUTAPLASMID"));
+            let mut line = row![].spacing(3);
+            for p in &plasmids {
+                let short = app
+                    .type_name(*p)
+                    .split(' ')
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                line = line.push(chip(short, false, Message::MenuMutate(*p)));
+            }
+            if item.mutation.is_some() {
+                line = line.push(chip(
+                    "Revert".to_string(),
+                    false,
+                    Message::RevertMutation(i),
+                ));
+            }
+            col = col.push(line.wrap());
+        }
+        col = col.push(ui::rule());
+        col = col.push(entry(
+            format!("Fill With {}", ui::clip(&name, 24)),
+            Message::MenuFill,
+        ));
+    }
+    let max = doc
+        .doc
+        .calc
+        .items
+        .get(i)
+        .map(|r| r.max_state)
+        .unwrap_or(State::Online);
+    let mut states = row![].spacing(3);
+    for s in [
+        State::Offline,
+        State::Online,
+        State::Active,
+        State::Overload,
+    ] {
+        if s > max {
+            continue;
+        }
+        states = states.push(chip(
+            state_name(s).to_string(),
+            item.state == s,
+            Message::MenuState(s),
+        ));
+    }
+    col = col.push(ui::rule());
+    col = col.push(ui::label("STATE"));
+    col = col.push(states);
+    container(col)
+        .padding(ui::PAD)
+        .width(360)
+        .style(theme::tooltip)
+        .into()
 }
 
 fn state_name(state: State) -> &'static str {
