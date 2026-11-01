@@ -44,7 +44,11 @@ impl Load {
 }
 
 fn ship_attr(calc: &Calculation, id: i32) -> f64 {
-    calc.ship.attributes.get(&id).map(|a| a.value).unwrap_or(0.0)
+    calc.ship
+        .attributes
+        .get(&id)
+        .map(|a| a.value)
+        .unwrap_or(0.0)
 }
 
 fn character_attr(calc: &Calculation, id: i32) -> f64 {
@@ -353,7 +357,10 @@ mod tests {
             },
         );
         assert_eq!(fit.items.len(), 2);
-        assert_eq!((fit.items[0].state, fit.items[0].quantity), (State::Active, 5));
+        assert_eq!(
+            (fit.items[0].state, fit.items[0].quantity),
+            (State::Active, 5)
+        );
         assert_eq!(
             (fit.items[1].state, fit.items[1].quantity),
             (State::Offline, 3)
