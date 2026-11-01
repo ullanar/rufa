@@ -28,6 +28,15 @@ pub mod group {
     pub const ANCILLARY_REMOTE_SHIELD_BOOSTER: i32 = 1697;
     pub const ANCILLARY_REMOTE_ARMOR_REPAIRER: i32 = 1698;
     pub const MUTADAPTIVE_REMOTE_ARMOR_REPAIRER: i32 = 2018;
+    pub const ECM: i32 = 201;
+}
+
+pub mod bomb {
+    pub const EM: i32 = 27920;
+    pub const THERMAL: i32 = 27916;
+    pub const KINETIC: i32 = 27912;
+    pub const EXPLOSIVE: i32 = 27918;
+    pub const ALL: [i32; 4] = [EM, THERMAL, KINETIC, EXPLOSIVE];
 }
 
 pub const MARKET_ROOTS: [i32; 9] = [9, 955, 157, 11, 24, 477, 2202, 2203, 4];

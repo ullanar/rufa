@@ -19,6 +19,22 @@ pub struct Remote {
 }
 
 impl Remote {
+    pub fn plus(self, other: Remote) -> Remote {
+        let range = match (self.range, other.range) {
+            (0.0, r) | (r, 0.0) => r,
+            (a, b) => a.min(b),
+        };
+        Remote {
+            shield: self.shield + other.shield,
+            armor: self.armor + other.armor,
+            armor_spooled: self.armor_spooled + other.armor_spooled,
+            hull: self.hull + other.hull,
+            capacitor: self.capacitor + other.capacitor,
+            range,
+            drain: self.drain + other.drain,
+        }
+    }
+
     pub fn hp(self) -> f64 {
         self.shield + self.armor + self.hull
     }
@@ -86,8 +102,8 @@ pub fn outgoing(info: &impl Info, ids: &AttrIds, fit: &Fit, calc: &Calculation) 
             group::REMOTE_ARMOR_REPAIRER
             | group::ANCILLARY_REMOTE_ARMOR_REPAIRER
             | group::MUTADAPTIVE_REMOTE_ARMOR_REPAIRER => {
-                let charged = kind == group::ANCILLARY_REMOTE_ARMOR_REPAIRER
-                    && item.charge.is_some();
+                let charged =
+                    kind == group::ANCILLARY_REMOTE_ARMOR_REPAIRER && item.charge.is_some();
                 let multiplier = if charged {
                     attr(result, ids.charged_armor_damage_multiplier).max(1.0)
                 } else {
@@ -170,7 +186,11 @@ pub fn sustained(info: &impl Info, ids: &AttrIds, fit: &Fit, calc: &Calculation)
                 } else {
                     1.0
                 };
-                (0.0, attr(result, ids.armor_damage_amount) * multiplier / cycle, 0.0)
+                (
+                    0.0,
+                    attr(result, ids.armor_damage_amount) * multiplier / cycle,
+                    0.0,
+                )
             }
             group::HULL_REPAIR_UNIT => {
                 (0.0, 0.0, attr(result, ids.structure_damage_amount) / cycle)
