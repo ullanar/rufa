@@ -46,25 +46,14 @@ fn record(config_dir: &Path, exe: &Path) -> io::Result<()> {
     )
 }
 
-/// A binary under `target/debug` or `target/release` is a build, not an
-/// install, so it never opens the install screen. Test binaries land one level
-/// deeper, in `deps`.
+/// A binary anywhere under a cargo `target` directory is a build, not an
+/// install, so it never opens the install screen. The directory below `target`
+/// is not fixed: `debug`, `release`, a named profile, `deps` for a test binary,
+/// and `build/<crate>/<hash>/out` once a build script is in play.
 pub fn in_a_build_tree(exe: &Path) -> bool {
-    let Some(mut parent) = exe.parent() else {
-        return false;
-    };
-    if parent.file_name().and_then(|n| n.to_str()) == Some("deps") {
-        let Some(above) = parent.parent() else {
-            return false;
-        };
-        parent = above;
-    }
-    let profile = parent.file_name().and_then(|n| n.to_str());
-    let holder = parent
-        .parent()
-        .and_then(|p| p.file_name())
-        .and_then(|n| n.to_str());
-    matches!(profile, Some("debug" | "release")) && holder == Some("target")
+    exe.ancestors()
+        .filter_map(Path::file_name)
+        .any(|name| name == "target")
 }
 
 /// Whether the running executable is the installed one.
@@ -310,18 +299,22 @@ mod tests {
 
     #[test]
     fn a_binary_in_the_cargo_target_tree_is_not_an_install() {
-        assert!(in_a_build_tree(Path::new(
-            "/home/x/prj/rufa/target/release/rufa"
-        )));
-        assert!(in_a_build_tree(Path::new(
-            "/home/x/prj/rufa/target/debug/rufa"
-        )));
-        assert!(!in_a_build_tree(Path::new("/home/x/.local/bin/rufa")));
-        assert!(in_a_build_tree(Path::new(
-            "/home/x/prj/rufa/target/debug/deps/rufa-1a2b"
-        )));
-        assert!(!in_a_build_tree(Path::new("/home/x/Downloads/rufa")));
-        assert!(!in_a_build_tree(Path::new("/home/x/deps/rufa")));
+        for path in [
+            "/home/x/prj/rufa/target/release/rufa",
+            "/home/x/prj/rufa/target/debug/rufa",
+            "/home/x/prj/rufa/target/debug/deps/rufa-1a2b",
+            "/home/x/prj/rufa/target/x86_64-pc-windows-msvc/release/rufa.exe",
+            "/runner/work/rufa/rufa/target/debug/build/rufa-app/4ad7/out/rufa-4ad7",
+        ] {
+            assert!(in_a_build_tree(Path::new(path)), "{path}");
+        }
+        for path in [
+            "/home/x/.local/bin/rufa",
+            "/home/x/Downloads/rufa",
+            "/home/x/deps/rufa",
+        ] {
+            assert!(!in_a_build_tree(Path::new(path)), "{path}");
+        }
     }
 
     #[test]
