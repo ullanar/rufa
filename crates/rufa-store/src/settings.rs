@@ -10,6 +10,7 @@ pub struct Settings {
     pub browser_ratio: f32,
     pub fit_ratio: f32,
     pub esi_client_id: String,
+    pub ui_scale: f32,
 }
 
 impl Default for Settings {
@@ -21,6 +22,7 @@ impl Default for Settings {
             browser_ratio: 0.2,
             fit_ratio: 0.55,
             esi_client_id: String::new(),
+            ui_scale: 1.0,
         }
     }
 }
@@ -43,6 +45,7 @@ impl Settings {
                 "browser_ratio" => s.browser_ratio = value.parse().unwrap_or(s.browser_ratio),
                 "fit_ratio" => s.fit_ratio = value.parse().unwrap_or(s.fit_ratio),
                 "esi_client_id" => s.esi_client_id = value.to_string(),
+                "ui_scale" => s.ui_scale = value.parse().unwrap_or(1.0),
                 _ => {}
             }
         }

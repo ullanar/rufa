@@ -25,9 +25,9 @@ pub const EDGE: Color = rgb(0x323B49);
 pub const STRONG: Color = rgb(0x44505F);
 
 pub const TEXT: Color = rgb(0xE6EBF2);
-pub const TEXT_SECONDARY: Color = rgb(0xA3AEBE);
-pub const MUTED: Color = rgb(0x7E8A9B);
-pub const FAINT: Color = rgb(0x5C6676);
+pub const TEXT_SECONDARY: Color = rgb(0xBCC6D4);
+pub const MUTED: Color = rgb(0x93A0B2);
+pub const FAINT: Color = rgb(0x6B7687);
 pub const DISABLED: Color = rgb(0x464F5D);
 
 pub const ACCENT: Color = rgb(0x4FC3E8);
@@ -249,7 +249,7 @@ pub fn chip(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style 
         } else {
             match status {
                 button::Status::Hovered => flat(Some(OVERLAY), TEXT, Some(STRONG), 999.0),
-                _ => flat(Some(RAISED), TEXT_SECONDARY, Some(EDGE), 999.0),
+                _ => flat(Some(RAISED), TEXT, Some(STRONG), 999.0),
             }
         }
     }
