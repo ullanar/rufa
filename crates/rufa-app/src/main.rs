@@ -2459,7 +2459,8 @@ mod tests {
         let Some(app) = app() else { return };
         assert!(
             !app.setup_prompt,
-            "the test binary is a build, not an install"
+            "the test binary is a build, not an install: {:?}",
+            std::env::current_exe()
         );
     }
 
