@@ -487,15 +487,28 @@ fn character(app: &App) -> El<'_> {
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
-    let esi_hint = text("Register an application at developers.eveonline.com with the scope esi-skills.read_skills.v1 and the callback http://localhost:PORT/callback, any port.")
-        .size(ui::MICRO)
-        .color(theme::MUTED);
+    let esi_hint = column![
+        text("An import needs an application of your own.")
+            .size(ui::MICRO)
+            .color(theme::MUTED),
+        text("Register it at developers.eveonline.com.")
+            .size(ui::MICRO)
+            .color(theme::MUTED),
+        text("Scope: esi-skills.read_skills.v1")
+            .size(ui::MICRO)
+            .color(theme::TEXT_SECONDARY),
+        text("Callback: http://localhost:PORT/callback, any port.")
+            .size(ui::MICRO)
+            .color(theme::TEXT_SECONDARY),
+    ]
+    .spacing(1);
 
     let CharChoice::Saved(i) = app.current else {
         return column![
             picker,
             ui::muted(
-                "All N sets every skill to that level. Add a character to edit skills, or log in."
+                "All 0 and All 5 set every skill to that level. Add a character to edit \
+                 single skills, or import one from EVE."
             ),
             esi,
             esi_hint,
