@@ -1,5 +1,7 @@
 use iced::widget::canvas::{self, Frame, Path, Stroke};
-use iced::widget::{canvas as canvas_widget, column, container, row, scrollable, space, text};
+use iced::widget::{
+    button, canvas as canvas_widget, column, container, row, scrollable, space, text,
+};
 use iced::{Color, Element, Length, Point, Rectangle, Renderer, Theme, mouse};
 use rufa_sim::State;
 
@@ -175,21 +177,44 @@ pub fn stat_row_colored<'a>(narrow: bool, name: &'a str, shown: String, color: C
         .into()
 }
 
-pub fn section<'a>(name: &'a str, headline: Option<String>, body: El<'a>) -> El<'a> {
-    section_colored(name, headline, theme::TEXT, body)
+pub fn section<'a>(
+    name: &'static str,
+    headline: Option<String>,
+    folded: bool,
+    body: El<'a>,
+) -> El<'a> {
+    section_colored(name, headline, theme::TEXT, folded, body)
 }
 
+/// A section keeps its headline when folded, so a closed one still answers the
+/// question it is named after.
 pub fn section_colored<'a>(
-    name: &'a str,
+    name: &'static str,
     headline: Option<String>,
     color: Color,
+    folded: bool,
     body: El<'a>,
 ) -> El<'a> {
     let mut head = row![eyebrow(name).width(Length::Fill)].align_y(iced::Alignment::Center);
     if let Some(h) = headline {
         head = head.push(value_colored(h, color));
     }
-    container(column![head, body].spacing(GAP))
+    head = head.push(
+        text(if folded { "\u{25b8}" } else { "\u{25be}" })
+            .size(MICRO)
+            .color(theme::MUTED),
+    );
+    let head = button(head.spacing(GAP_ROW))
+        .padding(0)
+        .width(Length::Fill)
+        .style(theme::bare)
+        .on_press(Message::ToggleStatSection(name));
+    let inside: El<'a> = if folded {
+        space().height(0).into()
+    } else {
+        body
+    };
+    container(column![head, inside].spacing(GAP))
         .padding([6.0, PAD])
         .width(Length::Fill)
         .style(theme::card)

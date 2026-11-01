@@ -26,11 +26,17 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         fmt::seconds(cap.depletes_in)
     };
     let mut col = column![
-        ui::section("Resources", None, resources(s, narrow)),
+        ui::section(
+            "Resources",
+            None,
+            app.stats_folded.contains("Resources"),
+            resources(s, narrow),
+        ),
         ui::section(
             "Defense",
             Some(fmt::num(s.defense.ehp, 0)),
-            defense(app, s, narrow)
+            app.stats_folded.contains("Defense"),
+            defense(app, s, narrow),
         ),
     ]
     .spacing(ui::SECTION_GAP);
@@ -39,6 +45,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         col = col.push(ui::section(
             "Offense",
             Some(fmt::num(guns, 1)),
+            app.stats_folded.contains("Offense"),
             offense(app, doc, s, narrow),
         ));
     }
@@ -52,6 +59,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             "Remote reps",
             Some(head),
             theme::SUCCESS_TEXT,
+            app.stats_folded.contains("Remote reps"),
             remote(s, narrow),
         ));
     }
@@ -59,25 +67,34 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         col = col.push(ui::section(
             "Mining",
             Some(format!("{} m3/s", fmt::num(s.mining.total(), 2))),
+            app.stats_folded.contains("Mining"),
             mining(s, narrow),
         ));
     }
     col = col.extend([
-        ui::section("Capacitor", Some(cap_head), capacitor(doc, s, narrow)),
+        ui::section(
+            "Capacitor",
+            Some(cap_head),
+            app.stats_folded.contains("Capacitor"),
+            capacitor(doc, s, narrow),
+        ),
         ui::section(
             "Navigation",
             Some(format!("{} m/s", fmt::num(s.navigation.max_velocity, 0))),
+            app.stats_folded.contains("Navigation"),
             navigation(s, narrow),
         ),
         ui::section(
             "Targeting",
             Some(fmt::distance(s.targeting.max_range)),
+            app.stats_folded.contains("Targeting"),
             targeting(s, narrow),
         ),
         ui::section(
             "Price",
             app.fit_price(doc)
                 .map(|price| format!("{} ISK", fmt::short(price.hull))),
+            app.stats_folded.contains("Price"),
             price(app, doc, narrow),
         ),
     ]);
@@ -88,7 +105,12 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         } else {
             ("Selected item", None)
         };
-        col = col.push(ui::section(name, headline, item_attributes(app, doc, item)));
+        col = col.push(ui::section(
+            name,
+            headline,
+            app.stats_folded.contains(name),
+            item_attributes(app, doc, item),
+        ));
     }
     ui::scroll(container(col).padding(iced::Padding {
         top: 0.0,
