@@ -75,19 +75,53 @@ pub fn latest_tag() -> Result<String, UpdateError> {
         .ok_or_else(|| UpdateError::Http(format!("odd release location {location}")))
 }
 
-pub fn download(dir: &Path, mut progress: impl FnMut(&str)) -> Result<String, UpdateError> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Progress {
+    pub file: &'static str,
+    pub received: u64,
+    pub total: Option<u64>,
+}
+
+pub const FILES: [&str; 3] = [SDE_FILE, NAMES_FILE, TEXTS_FILE];
+
+pub fn download(dir: &Path, mut progress: impl FnMut(Progress)) -> Result<String, UpdateError> {
+    use std::io::Read;
     std::fs::create_dir_all(dir)?;
     let agent = agent();
     let tag = latest_tag()?;
-    for file in [SDE_FILE, NAMES_FILE, TEXTS_FILE] {
-        progress(file);
+    for file in FILES {
         let url = format!("{RELEASES}/download/{tag}/{file}");
         let mut response = agent.get(&url).call()?;
+        let total = response
+            .headers()
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok());
+        progress(Progress {
+            file,
+            received: 0,
+            total,
+        });
         let mut reader = response.body_mut().with_config().limit(BODY_LIMIT).reader();
         let part = dir.join(format!("{file}.part"));
         let mut out = std::fs::File::create(&part)?;
-        std::io::copy(&mut reader, &mut out)?;
+        let mut buffer = [0u8; 64 * 1024];
+        let mut received: u64 = 0;
+        loop {
+            let n = reader.read(&mut buffer)?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buffer[..n])?;
+            received += n as u64;
+            progress(Progress {
+                file,
+                received,
+                total,
+            });
+        }
         out.flush()?;
+        drop(out);
         std::fs::rename(&part, dir.join(file))?;
     }
     std::fs::write(dir.join(VERSION_FILE), format!("{tag}\n"))?;

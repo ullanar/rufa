@@ -12,7 +12,6 @@ pub const SMALL: f32 = 12.0;
 pub const BODY: f32 = 13.0;
 pub const VALUE: f32 = 14.0;
 pub const TITLE: f32 = 16.0;
-pub const HERO: f32 = 26.0;
 
 pub const ROW: f32 = 26.0;
 pub const STAT_ROW: f32 = 22.0;
