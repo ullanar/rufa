@@ -1,11 +1,13 @@
 mod fmt;
+mod theme;
+mod ui;
 mod view;
 
 use std::path::PathBuf;
 
 use iced::keyboard::{self, Key, Modifiers};
 use iced::widget::pane_grid;
-use iced::{Element, Subscription, Task, Theme, clipboard};
+use iced::{Element, Subscription, Task, clipboard};
 use rufa_data::Game;
 use rufa_sim::attrs::AttrIds;
 use rufa_sim::document::Document;
@@ -14,16 +16,18 @@ use rufa_sim::{Fit, State, edit};
 use rufa_store::{Character, ImplantSet, PriceCache, SavedFit, Settings, TargetProfile};
 
 fn main() -> iced::Result {
-    iced::application(App::boot, App::update, App::view)
+    let mut application = iced::application(App::boot, App::update, App::view)
         .title(App::title)
-        .theme(theme)
+        .theme(theme::of)
+        .style(theme::root)
         .subscription(App::subscription)
         .window_size((1440.0, 900.0))
-        .run()
-}
-
-fn theme(_: &App) -> Theme {
-    Theme::Dark
+        .default_font(theme::UI)
+        .antialiasing(true);
+    for font in theme::FONTS {
+        application = application.font(font);
+    }
+    application.run()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1613,6 +1617,7 @@ mod tests {
         let rifter = type_id(&app, "Rifter");
         let ac = type_id(&app, "200mm AutoCannon II");
         let emp = type_id(&app, "EMP S");
+        app.prices = PriceCache::default();
         let _ = app.update(Message::NewFit(rifter));
         let _ = app.update(Message::AddItem(ac));
         let _ = app.update(Message::AddItem(emp));

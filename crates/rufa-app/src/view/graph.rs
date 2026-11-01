@@ -4,16 +4,11 @@ use iced::{Color, Element, Length, Point, Rectangle, Renderer, Theme, mouse};
 use rufa_sim::graph::{self, Curve};
 
 use crate::fmt;
+use crate::theme;
+use crate::ui;
 use crate::{App, GraphKind, Message};
 
-const COLORS: [Color; 6] = [
-    Color::from_rgb(0.35, 0.75, 1.0),
-    Color::from_rgb(1.0, 0.6, 0.3),
-    Color::from_rgb(0.5, 0.9, 0.5),
-    Color::from_rgb(0.95, 0.5, 0.8),
-    Color::from_rgb(0.9, 0.9, 0.4),
-    Color::from_rgb(0.7, 0.6, 1.0),
-];
+const COLORS: [Color; 6] = theme::SERIES;
 
 pub fn view(app: &App) -> Element<'_, Message> {
     let Some(ids) = app.ids else {
@@ -64,10 +59,17 @@ pub fn view(app: &App) -> Element<'_, Message> {
 
     let mut legend = row![].spacing(12);
     for (i, (name, _)) in series.iter().enumerate() {
-        legend = legend.push(text(name.clone()).size(12).color(COLORS[i % COLORS.len()]));
+        legend = legend.push(
+            text(name.clone())
+                .size(ui::BODY)
+                .font(theme::UI_MEDIUM)
+                .color(COLORS[i % COLORS.len()]),
+        );
     }
     let builtin = rufa_store::targets::builtin();
-    let mut profiles = row![text("Target").size(11).style(text::secondary)].spacing(3);
+    let mut profiles = row![ui::label("TARGET")]
+        .spacing(3)
+        .align_y(iced::Alignment::Center);
     for (i, p) in app.targets.iter().enumerate() {
         let style = if app.target == i {
             button::primary
@@ -100,13 +102,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .spacing(4)
     .align_y(iced::Alignment::Center);
     for (i, label) in ["EM", "Th", "Kin", "Exp"].iter().enumerate() {
-        editor = editor.push(text(*label).size(10).style(text::secondary));
+        editor = editor.push(ui::label(*label));
         editor = editor.push(
             text_input("0%", &app.target_resists[i])
                 .on_input(move |s| Message::TargetResist(i, s))
-                .size(11)
-                .padding(3)
-                .width(46),
+                .size(ui::SMALL)
+                .padding([3, 6])
+                .width(46)
+                .style(theme::input),
         );
     }
     editor = editor.push(
@@ -178,7 +181,12 @@ fn cap_view<'a>(app: &'a App, kinds: Element<'a, Message>) -> Element<'a, Messag
         .collect();
     let mut legend = row![].spacing(12);
     for (i, (name, _)) in series.iter().enumerate() {
-        legend = legend.push(text(name.clone()).size(12).color(COLORS[i % COLORS.len()]));
+        legend = legend.push(
+            text(name.clone())
+                .size(ui::BODY)
+                .font(theme::UI_MEDIUM)
+                .color(COLORS[i % COLORS.len()]),
+        );
     }
     let plot = canvas_widget(Plot {
         series,
@@ -220,9 +228,9 @@ impl canvas::Program<Message> for Plot {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = Frame::new(renderer, bounds.size());
-        let palette = theme.extended_palette();
-        let axis_color = palette.background.strong.color;
-        let text_color = palette.background.base.text;
+        let _ = theme;
+        let axis_color = crate::theme::HAIRLINE;
+        let text_color = crate::theme::MUTED;
 
         let max_dps = self.max_y;
         let plot = Rectangle {

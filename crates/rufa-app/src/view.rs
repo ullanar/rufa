@@ -3,20 +3,23 @@ mod fit;
 mod graph;
 mod stats;
 
-use iced::widget::{button, column, container, pane_grid, row, text, text_input};
+use iced::widget::{button, column, container, pane_grid, row, space, text, text_input};
 use iced::{Element, Length};
 
+use crate::theme;
+use crate::ui::{self, El};
 use crate::{App, CenterTab, CharChoice, Message, Pane};
 
 pub fn root(app: &App) -> Element<'_, Message> {
     if app.downloading {
         return container(
             column![
-                text("Rufa").size(28),
-                text(&app.status).size(14),
-                text("Three files from github.com/EVEShipFit/sde-patched, about 25 MB.")
-                    .size(12)
-                    .style(text::secondary),
+                text("RUFA")
+                    .font(theme::UI_SEMI)
+                    .size(ui::HERO)
+                    .color(theme::TEXT),
+                ui::body(&app.status),
+                ui::muted("Three files from github.com/EVEShipFit/sde-patched, about 25 MB."),
             ]
             .spacing(10)
             .align_x(iced::Alignment::Center),
@@ -25,55 +28,59 @@ pub fn root(app: &App) -> Element<'_, Message> {
         .into();
     }
     let grid = pane_grid(&app.panes, |_, pane, _| {
-        let body: Element<'_, Message> = match pane {
+        let body: El<'_> = match pane {
             Pane::Browser => browser::view(app),
             Pane::Fit => center(app),
             Pane::Stats => stats::view(app),
         };
         pane_grid::Content::new(
             container(body)
-                .padding(6)
+                .padding(ui::PAD)
                 .width(Length::Fill)
-                .height(Length::Fill),
+                .height(Length::Fill)
+                .style(theme::pane),
         )
     })
-    .spacing(4)
+    .spacing(ui::GAP)
+    .min_size(220)
     .on_resize(8, Message::PaneResized);
 
     column![
         toolbar(app),
-        container(grid).width(Length::Fill).height(Length::Fill),
+        container(grid)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding([0.0, ui::GAP]),
         status_bar(app),
     ]
+    .spacing(ui::GAP)
     .into()
 }
 
-fn center(app: &App) -> Element<'_, Message> {
+fn center(app: &App) -> El<'_> {
     let tab = |label: &'static str, which: CenterTab| {
-        let style = if app.center == which {
-            button::primary
-        } else {
-            button::secondary
-        };
-        button(text(label).size(12))
+        button(text(label).size(ui::BODY).font(theme::UI_MEDIUM))
             .padding([3, 10])
-            .style(style)
+            .style(theme::chip(app.center == which))
             .on_press(Message::CenterTab(which))
     };
-    let tabs = row![tab("Fit", CenterTab::Fit), tab("Graph", CenterTab::Graph)].spacing(4);
+    let tabs = row![tab("Fit", CenterTab::Fit), tab("Graph", CenterTab::Graph)].spacing(ui::GAP);
     let body = match app.center {
         CenterTab::Fit => fit::view(app),
         CenterTab::Graph => graph::view(app),
     };
-    column![tabs, body].spacing(6).height(Length::Fill).into()
+    column![tabs, body]
+        .spacing(ui::GAP_ROW)
+        .height(Length::Fill)
+        .into()
 }
 
-fn toolbar(app: &App) -> Element<'_, Message> {
+fn toolbar(app: &App) -> El<'_> {
     let has_fit = !app.docs.is_empty();
     let action = |label: &'static str, msg: Message| {
-        let b = button(text(label).size(12))
-            .padding([3, 8])
-            .style(button::secondary);
+        let b = button(text(label).size(ui::BODY))
+            .padding([4, 10])
+            .style(theme::ghost);
         if has_fit { b.on_press(msg) } else { b }
     };
     let name = app
@@ -82,72 +89,78 @@ fn toolbar(app: &App) -> Element<'_, Message> {
         .and_then(|d| d.doc.fit.name.clone())
         .unwrap_or_default();
     let mut bar = row![
-        text("Rufa").size(18),
+        container(
+            text("RUFA")
+                .font(theme::LABEL)
+                .size(ui::VALUE)
+                .color(theme::ACCENT)
+        )
+        .padding([0, 6]),
         text_input("Fit name", &name)
             .on_input(Message::RenameFit)
             .width(260)
-            .size(12)
-            .padding(4),
+            .size(ui::BODY)
+            .padding([5, 8])
+            .style(theme::input),
         action("Save", Message::Save),
         action("Undo", Message::Undo),
         action("Redo", Message::Redo),
         action("Copy EFT", Message::CopyEft),
-        button(text("Paste EFT").size(12))
-            .padding([3, 8])
-            .style(button::secondary)
+        button(text("Paste EFT").size(ui::BODY))
+            .padding([4, 10])
+            .style(theme::ghost)
             .on_press(Message::PasteEft),
     ]
-    .spacing(6)
+    .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
 
-    bar = bar.push(iced::widget::space::horizontal());
-    bar = bar.push(text("Skills").size(12));
+    bar = bar.push(space().width(Length::Fill));
+    bar = bar.push(ui::label("SKILLS"));
     for level in [0u8, 5] {
-        let label = format!("All {level}");
-        let style = if app.current == CharChoice::All(level) {
-            button::primary
-        } else {
-            button::secondary
-        };
         bar = bar.push(
-            button(text(label).size(12))
-                .padding([3, 8])
-                .style(style)
+            button(text(format!("All {level}")).size(ui::SMALL))
+                .padding([3, 9])
+                .style(theme::chip(app.current == CharChoice::All(level)))
                 .on_press(Message::SkillLevel(level)),
         );
     }
     for (i, c) in app.characters.iter().enumerate() {
-        let style = if app.current == CharChoice::Saved(i) {
-            button::primary
-        } else {
-            button::secondary
-        };
         bar = bar.push(
-            button(text(&c.name).size(12))
-                .padding([3, 8])
-                .style(style)
+            button(text(&c.name).size(ui::SMALL))
+                .padding([3, 9])
+                .style(theme::chip(app.current == CharChoice::Saved(i)))
                 .on_press(Message::ChooseCharacter(CharChoice::Saved(i))),
         );
     }
-    container(bar).padding([4, 8]).width(Length::Fill).into()
+    container(bar)
+        .padding([0.0, ui::PAD])
+        .height(ui::TOOLBAR)
+        .width(Length::Fill)
+        .align_y(iced::Alignment::Center)
+        .style(theme::toolbar)
+        .into()
 }
 
-fn status_bar(app: &App) -> Element<'_, Message> {
-    let mut bar = row![
-        text(&app.status)
-            .size(12)
-            .style(text::secondary)
-            .width(Length::Fill)
-    ]
-    .spacing(8)
-    .align_y(iced::Alignment::Center);
+fn status_bar(app: &App) -> El<'_> {
+    let mut bar = row![ui::small(&app.status).width(Length::Fill)]
+        .spacing(ui::PAD)
+        .align_y(iced::Alignment::Center);
+    if app.prices_pending {
+        bar = bar.push(ui::label("prices"));
+    }
     if let Some(tag) = &app.sde_update {
         bar = bar.push(
-            button(text(format!("Update game data to {tag}")).size(11))
+            button(text(format!("Update game data to {tag}")).size(ui::SMALL))
                 .padding([2, 8])
-                .style(button::success)
+                .style(theme::secondary)
                 .on_press(Message::UpdateSde),
         );
     }
-    container(bar).padding([2, 8]).width(Length::Fill).into()
+    container(bar)
+        .padding([0.0, ui::PAD])
+        .height(ui::STATUS)
+        .width(Length::Fill)
+        .align_y(iced::Alignment::Center)
+        .style(theme::toolbar)
+        .into()
 }

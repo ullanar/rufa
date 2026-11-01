@@ -1,72 +1,133 @@
-use iced::widget::{button, column, container, mouse_area, pick_list, row, scrollable, text};
-use rufa_sim::projection::Projected;
-
-use crate::EnvChoice;
-use iced::{Color, Element, Length};
+use iced::widget::{
+    button, column, container, mouse_area, pick_list, row, scrollable, space, text,
+};
+use iced::{Color, Length};
 use rufa_sim::place::Rack;
+use rufa_sim::projection::Projected;
 use rufa_sim::{Slot, State};
 
 use crate::fmt;
-use crate::{App, Doc, Message};
+use crate::theme;
+use crate::ui::{self, El};
+use crate::{App, Doc, EnvChoice, Message};
 
-pub fn view(app: &App) -> Element<'_, Message> {
-    let mut tabs = row![].spacing(2);
+pub fn view(app: &App) -> El<'_> {
+    let mut tabs = row![].spacing(2).align_y(iced::Alignment::Center);
     for (i, doc) in app.docs.iter().enumerate() {
-        let style = if i == app.active {
-            button::primary
-        } else {
-            button::secondary
-        };
-        let mark = if doc.dirty { "*" } else { "" };
+        let mark = if doc.dirty { " •" } else { "" };
         tabs = tabs.push(
-            button(text(format!("{}{mark}", app.fit_title(doc))).size(12))
-                .padding([3, 8])
-                .style(style)
-                .on_press(Message::SelectTab(i)),
+            button(
+                text(format!("{}{mark}", app.fit_title(doc)))
+                    .size(ui::BODY)
+                    .font(theme::UI_MEDIUM),
+            )
+            .padding([4, 10])
+            .style(theme::tab(i == app.active))
+            .on_press(Message::SelectTab(i)),
         );
         tabs = tabs.push(
-            button(text("x").size(11))
+            button(text("×").size(ui::SMALL))
                 .padding([3, 5])
-                .style(button::text)
+                .style(theme::ghost)
                 .on_press(Message::CloseTab(i)),
         );
     }
-    let body: Element<'_, Message> = match app.docs.get(app.active) {
-        Some(doc) => scrollable(slots(app, doc)).height(Length::Fill).into(),
+    let body: El<'_> = match app.docs.get(app.active) {
+        Some(doc) => column![
+            scrollable(slots(app, doc))
+                .style(theme::scroll)
+                .height(Length::Fill),
+            violations(app, doc),
+        ]
+        .spacing(ui::GAP_ROW)
+        .height(Length::Fill)
+        .into(),
         None => container(
-            text("Pick a hull on the Ships tab, or paste an EFT fit with Ctrl+V")
-                .style(text::secondary),
+            column![
+                text("No fit open")
+                    .font(theme::UI_SEMI)
+                    .size(ui::TITLE)
+                    .color(theme::TEXT_SECONDARY),
+                ui::muted("Pick a hull on the Ships tab, or paste an EFT or DNA fit with Ctrl+V."),
+            ]
+            .spacing(ui::GAP_ROW)
+            .align_x(iced::Alignment::Center),
         )
-        .padding(20)
+        .center(Length::Fill)
         .into(),
     };
-    column![
+    let strip = container(
         scrollable(tabs).direction(scrollable::Direction::Horizontal(
-            scrollable::Scrollbar::default()
+            scrollable::Scrollbar::default(),
         )),
-        body
-    ]
-    .spacing(6)
-    .height(Length::Fill)
+    )
+    .padding(2)
+    .width(Length::Fill)
+    .style(theme::rounded(theme::SUNKEN, 6.0));
+    column![strip, body]
+        .spacing(ui::GAP_ROW)
+        .height(Length::Fill)
+        .into()
+}
+
+fn rail_color(rack: Rack) -> Color {
+    match rack {
+        Rack::High => theme::RAIL_HIGH,
+        Rack::Medium => theme::RAIL_MEDIUM,
+        Rack::Low => theme::RAIL_LOW,
+        Rack::Rig => theme::RAIL_RIG,
+        Rack::Subsystem => theme::RAIL_SUBSYSTEM,
+        Rack::Service => theme::RAIL_SERVICE,
+    }
+}
+
+fn rack_header<'a>(name: String, used: usize, count: u8, over: bool) -> El<'a> {
+    let counter_color = if over {
+        theme::DANGER_TEXT
+    } else {
+        theme::MUTED
+    };
+    container(
+        row![
+            ui::eyebrow(&name).width(Length::Fill),
+            text(format!("{used}/{count}"))
+                .font(theme::LABEL)
+                .size(ui::LABEL)
+                .color(counter_color),
+        ]
+        .align_y(iced::Alignment::Center),
+    )
+    .padding(iced::Padding {
+        top: 8.0,
+        right: 6.0,
+        bottom: 2.0,
+        left: 2.0,
+    })
+    .width(Length::Fill)
+    .into()
+}
+
+fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
+    container(
+        row![
+            container(space().width(3).height(14)).style(theme::rounded(rail, 1.5)),
+            text(label).size(ui::SMALL).color(theme::FAINT),
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
+    )
+    .height(ui::ROW)
+    .padding([0, 4])
+    .width(Length::Fill)
     .into()
 }
 
 type SlotFilter = fn(Slot) -> bool;
 
-fn state_color(state: State) -> Color {
-    match state {
-        State::Offline => Color::from_rgb(0.45, 0.45, 0.45),
-        State::Online => Color::from_rgb(0.55, 0.65, 0.85),
-        State::Active => Color::from_rgb(0.35, 0.85, 0.45),
-        State::Overload => Color::from_rgb(0.95, 0.45, 0.25),
-    }
-}
-
-fn slots<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
+fn slots<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
     let fit = &doc.doc.fit;
-    let calc = &doc.doc.calc;
     let layout = &doc.doc.layout;
-    let mut col = column![].spacing(2).padding(iced::Padding {
+    let mut col = column![].spacing(1).padding(iced::Padding {
         top: 0.0,
         right: 12.0,
         bottom: 0.0,
@@ -78,29 +139,24 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
         && let Some(modes) = ty.mode_type_ids()
         && !modes.is_empty()
     {
-        let mut line = row![text("Mode").size(12).style(text::secondary)]
-            .spacing(4)
+        let mut line = row![ui::label("MODE")]
+            .spacing(ui::GAP)
             .align_y(iced::Alignment::Center);
         for mode in modes {
-            let label = app
+            let name = app
                 .type_name(mode)
                 .rsplit(' ')
                 .nth(1)
                 .unwrap_or("")
                 .to_string();
-            let style = if fit.ship.mode == Some(mode) {
-                button::primary
-            } else {
-                button::secondary
-            };
             line = line.push(
-                button(text(label).size(11))
-                    .padding([1, 6])
-                    .style(style)
+                button(text(name).size(ui::SMALL))
+                    .padding([2, 8])
+                    .style(theme::chip(fit.ship.mode == Some(mode)))
                     .on_press(Message::SetMode(Some(mode))),
             );
         }
-        col = col.push(container(line).padding([4, 4]));
+        col = col.push(container(line).padding([4, 2]));
     }
 
     for rack in Rack::ALL {
@@ -113,48 +169,46 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
         if count == 0 && used == 0 {
             continue;
         }
-        let header = format!("{} {used}/{count}", rack.label());
-        let header_style = if used > count as usize {
-            text::danger
-        } else {
-            text::secondary
-        };
-        col = col.push(
-            container(text(header).size(12).style(header_style)).padding(iced::Padding {
-                top: 6.0,
-                right: 4.0,
-                bottom: 2.0,
-                left: 4.0,
-            }),
-        );
+        col = col.push(rack_header(
+            rack.label().to_string(),
+            used,
+            count,
+            used > count as usize,
+        ));
         for index in 0..count.max(used as u8) {
             let slot = rack.slot(index);
             match fit.items.iter().position(|it| it.slot == slot) {
-                Some(i) => col = col.push(item_row(app, doc, i)),
+                Some(i) => col = col.push(item_row(app, doc, i, rail_color(rack))),
                 None => {
-                    col = col.push(
-                        container(
-                            text(format!("[Empty {} slot]", rack.label()))
-                                .size(12)
-                                .style(text::secondary),
-                        )
-                        .padding([2, 8]),
-                    );
+                    col = col.push(empty_row(
+                        format!("{} slot", rack.label()),
+                        rail_color(rack),
+                    ))
                 }
             }
         }
     }
 
-    let sections: [(&str, SlotFilter); 5] = [
-        ("Drones", |s| s == Slot::DroneBay),
-        ("Fighters", |s| {
-            matches!(s, Slot::FighterTube(_) | Slot::FighterBay)
-        }),
-        ("Implants", |s| matches!(s, Slot::Implant(_))),
-        ("Boosters", |s| matches!(s, Slot::Booster(_))),
-        ("Cargo", |s| s == Slot::Cargo),
+    let sections: [(&str, SlotFilter, Color); 5] = [
+        ("Drones", |s| s == Slot::DroneBay, theme::RAIL_SERVICE),
+        (
+            "Fighters",
+            |s| matches!(s, Slot::FighterTube(_) | Slot::FighterBay),
+            theme::RAIL_SERVICE,
+        ),
+        (
+            "Implants",
+            |s| matches!(s, Slot::Implant(_)),
+            theme::RAIL_SUBSYSTEM,
+        ),
+        (
+            "Boosters",
+            |s| matches!(s, Slot::Booster(_)),
+            theme::RAIL_SUBSYSTEM,
+        ),
+        ("Cargo", |s| s == Slot::Cargo, theme::RAIL_SERVICE),
     ];
-    for (label, matches) in sections {
+    for (label, matches, rail) in sections {
         let indexes: Vec<usize> = fit
             .items
             .iter()
@@ -165,154 +219,96 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
         if indexes.is_empty() {
             continue;
         }
-        col = col.push(
-            container(text(label).size(12).style(text::secondary)).padding(iced::Padding {
-                top: 6.0,
-                right: 4.0,
-                bottom: 2.0,
-                left: 4.0,
-            }),
-        );
+        col = col.push(container(ui::eyebrow(label)).padding(iced::Padding {
+            top: 8.0,
+            right: 6.0,
+            bottom: 2.0,
+            left: 2.0,
+        }));
         for i in indexes {
-            col = col.push(item_row(app, doc, i));
+            col = col.push(item_row(app, doc, i, rail));
         }
     }
 
     col = col.push(implant_sets(app));
     col = col.push(projected(app, doc));
-
-    if let Some(violations) = &calc.violations
-        && !violations.is_empty()
-    {
-        col = col.push(
-            container(text("Violations").size(12).style(text::danger)).padding(iced::Padding {
-                top: 8.0,
-                right: 4.0,
-                bottom: 2.0,
-                left: 4.0,
-            }),
-        );
-        for v in violations {
-            col = col.push(
-                container(text(app.describe_violation(v)).size(11).style(text::danger))
-                    .padding([1, 8]),
-            );
-        }
-    }
     col.into()
 }
 
-fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize) -> Element<'a, Message> {
-    let item = &doc.doc.fit.items[i];
-    let result = doc.doc.calc.items.get(i);
-    let state = result.map(|r| r.state).unwrap_or(item.state);
-    let mut name = app.type_name(item.type_id).to_string();
-    if item.quantity > 1 {
-        name = format!("{name} x{}", item.quantity);
+fn violations<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
+    let list = doc.doc.calc.violations.as_deref().unwrap_or(&[]);
+    if list.is_empty() {
+        return space().height(0).into();
     }
-    let charge = item
-        .charge
-        .as_ref()
-        .map(|c| app.type_name(c.type_id).to_string())
-        .unwrap_or_default();
-    let selected = app.selected_item == Some(i);
-
-    let state_dot = mouse_area(
-        container(text(state_label(state)).size(11).color(state_color(state)))
-            .width(48)
-            .padding([2, 4]),
-    )
-    .on_press(Message::CycleState(i))
-    .on_right_press(Message::ToggleOverload(i))
-    .on_middle_press(Message::ToggleOffline(i));
-
-    let info = item_info(app, doc, i);
-    let mut line = row![
-        state_dot,
-        text(name)
-            .size(12)
-            .width(Length::FillPortion(3))
-            .wrapping(text::Wrapping::None),
-        charge_cell(i, charge),
-        text(info)
-            .size(11)
-            .style(text::secondary)
-            .width(Length::FillPortion(2))
-            .wrapping(text::Wrapping::None),
-    ]
-    .spacing(6)
-    .align_y(iced::Alignment::Center);
-
-    if item.slot == Slot::DroneBay || item.slot == Slot::Cargo {
-        line = line.push(
-            button(text("-").size(11))
-                .padding([1, 5])
-                .style(button::text)
-                .on_press(Message::Quantity(i, item.quantity.saturating_sub(1))),
-        );
-        line = line.push(
-            button(text("+").size(11))
-                .padding([1, 5])
-                .style(button::text)
-                .on_press(Message::Quantity(i, item.quantity + 1)),
-        );
-    }
-    line = line.push(
-        button(text("x").size(11))
-            .padding([1, 5])
-            .style(button::text)
-            .on_press(Message::RemoveItem(i)),
-    );
-
-    let style = move |theme: &iced::Theme| {
-        let palette = theme.extended_palette();
-        container::Style {
-            background: selected.then(|| palette.primary.weak.color.into()),
-            ..container::Style::default()
-        }
+    let mut lines = column![].spacing(2);
+    let head = if list.len() == 1 {
+        "1 problem".to_string()
+    } else {
+        format!("{} problems", list.len())
     };
-    mouse_area(
-        container(line)
-            .padding([1, 4])
-            .style(style)
-            .width(Length::Fill),
-    )
-    .on_press(Message::SelectItem(Some(i)))
-    .into()
+    lines = lines.push(
+        text(head)
+            .font(theme::UI_MEDIUM)
+            .size(ui::BODY)
+            .color(theme::DANGER_TEXT),
+    );
+    for v in list.iter().take(4) {
+        lines = lines.push(
+            text(app.describe_violation(v))
+                .size(ui::SMALL)
+                .color(theme::DANGER_TEXT),
+        );
+    }
+    if list.len() > 4 {
+        lines = lines.push(
+            text(format!("and {} more", list.len() - 4))
+                .size(ui::SMALL)
+                .color(theme::DANGER_TEXT),
+        );
+    }
+    container(lines)
+        .padding([6, 10])
+        .width(Length::Fill)
+        .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE))
+        .into()
 }
 
-fn implant_sets(app: &App) -> Element<'_, Message> {
+fn implant_sets(app: &App) -> El<'_> {
     let mut line = row![
-        text("Implant sets").size(12).style(text::secondary),
-        button(text("save current").size(10))
-            .padding([1, 5])
-            .style(button::secondary)
+        ui::label("IMPLANT SETS"),
+        button(text("save current").size(ui::SMALL))
+            .padding([2, 8])
+            .style(theme::ghost)
             .on_press(Message::SaveImplantSet),
     ]
-    .spacing(4)
+    .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     for (i, set) in app.implant_sets.iter().enumerate() {
         line = line.push(
             row![
-                button(text(&set.name).size(10))
-                    .padding([1, 5])
-                    .style(button::primary)
+                button(text(&set.name).size(ui::SMALL))
+                    .padding([2, 8])
+                    .style(theme::chip(false))
                     .on_press(Message::ApplyImplantSet(i)),
-                button(text("x").size(10))
-                    .padding([1, 3])
-                    .style(button::text)
+                button(text("×").size(ui::SMALL))
+                    .padding([2, 4])
+                    .style(theme::ghost)
                     .on_press(Message::DeleteImplantSet(i)),
             ]
             .align_y(iced::Alignment::Center),
         );
     }
-    container(line.wrap()).padding([6, 4]).into()
+    container(line.wrap()).padding([8, 2]).into()
 }
 
-fn projected<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
-    let mut col =
-        column![container(text("Projected").size(12).style(text::secondary)).padding([6, 4])]
-            .spacing(2);
+fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
+    let mut col = column![container(ui::eyebrow("Projected")).padding(iced::Padding {
+        top: 8.0,
+        right: 6.0,
+        bottom: 2.0,
+        left: 2.0
+    })]
+    .spacing(2);
     if let Ok(game) = &app.game {
         let mut options = vec![EnvChoice {
             id: 0,
@@ -334,14 +330,15 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
         col = col.push(
             container(
                 pick_list(options, Some(selected), Message::Environment)
-                    .text_size(11)
-                    .padding([2, 6]),
+                    .text_size(ui::SMALL)
+                    .padding([4, 8])
+                    .style(theme::picker),
             )
-            .padding([1, 4]),
+            .padding([1, 2]),
         );
     }
-    let mut tabs = row![text("Project fit").size(11).style(text::secondary)]
-        .spacing(3)
+    let mut tabs = row![ui::label("PROJECT FIT")]
+        .spacing(ui::GAP)
         .align_y(iced::Alignment::Center);
     let mut any_tab = false;
     for (i, other) in app.docs.iter().enumerate() {
@@ -350,29 +347,32 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> Element<'a, Message> {
         }
         any_tab = true;
         tabs = tabs.push(
-            button(text(app.fit_title(other)).size(11))
-                .padding([1, 6])
-                .style(button::secondary)
+            button(text(app.fit_title(other)).size(ui::SMALL))
+                .padding([2, 8])
+                .style(theme::chip(false))
                 .on_press(Message::ProjectFit(i)),
         );
     }
     if any_tab {
-        col = col.push(container(tabs.wrap()).padding([1, 4]));
+        col = col.push(container(tabs.wrap()).padding([2, 2]));
     }
     for (i, p) in doc.doc.projections.iter().enumerate() {
         if matches!(p, Projected::Beacon(_)) {
             continue;
         }
         col = col.push(
-            row![
-                text(app.projection_label(p)).size(12).width(Length::Fill),
-                button(text("x").size(11))
-                    .padding([1, 5])
-                    .style(button::text)
-                    .on_press(Message::RemoveProjection(i)),
-            ]
-            .padding([1, 8])
-            .align_y(iced::Alignment::Center),
+            container(
+                row![
+                    ui::body(app.projection_label(p)).width(Length::Fill),
+                    button(text("×").size(ui::SMALL))
+                        .padding([2, 5])
+                        .style(theme::ghost)
+                        .on_press(Message::RemoveProjection(i)),
+                ]
+                .align_y(iced::Alignment::Center),
+            )
+            .height(ui::ROW)
+            .padding([0, 6]),
         );
     }
     col.into()
@@ -409,29 +409,98 @@ fn item_info(app: &App, doc: &Doc, i: usize) -> String {
     if let Some(cap) = get(ids.capacitor_need) {
         parts.push(format!("{} GJ", fmt::num(cap, 1)));
     }
-    parts.join("  ")
+    parts.join("  ·  ")
 }
 
-fn charge_cell<'a>(i: usize, charge: String) -> Element<'a, Message> {
+fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
+    let item = &doc.doc.fit.items[i];
+    let result = doc.doc.calc.items.get(i);
+    let state = result.map(|r| r.state).unwrap_or(item.state);
+    let mut name = app.type_name(item.type_id).to_string();
+    if item.quantity > 1 {
+        name = format!("{name}  ×{}", item.quantity);
+    }
+    let charge = item
+        .charge
+        .as_ref()
+        .map(|c| app.type_name(c.type_id).to_string())
+        .unwrap_or_default();
+    let selected = app.selected_item == Some(i);
+    let rail_shown = if state == State::Overload {
+        theme::OVERLOAD
+    } else {
+        rail
+    };
+
+    let glyph = mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
+        .on_press(Message::CycleState(i))
+        .on_right_press(Message::ToggleOverload(i))
+        .on_middle_press(Message::ToggleOffline(i));
+
+    let mut line = row![
+        container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
+        glyph,
+        text(ui::clip(&name, 30))
+            .size(ui::BODY)
+            .font(theme::UI_MEDIUM)
+            .color(theme::TEXT)
+            .width(Length::Fill)
+            .wrapping(text::Wrapping::None),
+        charge_cell(i, charge),
+        text(item_info(app, doc, i))
+            .size(ui::SMALL)
+            .color(theme::MUTED)
+            .width(190)
+            .wrapping(text::Wrapping::None)
+            .align_x(iced::alignment::Horizontal::Right),
+    ]
+    .spacing(ui::GAP_ROW)
+    .align_y(iced::Alignment::Center);
+
+    if item.slot == Slot::DroneBay || item.slot == Slot::Cargo {
+        line = line.push(
+            button(text("−").size(ui::SMALL))
+                .padding([1, 5])
+                .style(theme::ghost)
+                .on_press(Message::Quantity(i, item.quantity.saturating_sub(1))),
+        );
+        line = line.push(
+            button(text("+").size(ui::SMALL))
+                .padding([1, 5])
+                .style(theme::ghost)
+                .on_press(Message::Quantity(i, item.quantity + 1)),
+        );
+    }
+    line = line.push(
+        button(text("×").size(ui::SMALL))
+            .padding([1, 5])
+            .style(theme::ghost)
+            .on_press(Message::RemoveItem(i)),
+    );
+
+    mouse_area(
+        container(line)
+            .padding([0, 4])
+            .height(ui::ROW)
+            .align_y(iced::Alignment::Center)
+            .style(theme::row(selected))
+            .width(Length::Fill),
+    )
+    .on_press(Message::SelectItem(Some(i)))
+    .into()
+}
+
+fn charge_cell<'a>(i: usize, charge: String) -> El<'a> {
     if charge.is_empty() {
-        return text("").width(Length::FillPortion(2)).into();
+        return space().width(120).into();
     }
     mouse_area(
-        text(charge)
-            .size(11)
-            .style(text::secondary)
-            .width(Length::FillPortion(2))
+        text(ui::clip(&charge, 20))
+            .size(ui::SMALL)
+            .color(theme::TEXT_SECONDARY)
+            .width(120)
             .wrapping(text::Wrapping::None),
     )
     .on_right_press(Message::LoadCharge(i, None))
     .into()
-}
-
-fn state_label(state: State) -> &'static str {
-    match state {
-        State::Offline => "offline",
-        State::Online => "online",
-        State::Active => "active",
-        State::Overload => "heat",
-    }
 }

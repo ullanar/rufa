@@ -38,10 +38,6 @@ pub fn short(value: f64) -> String {
     }
 }
 
-pub fn resist(resonance: f64) -> String {
-    format!("{:.0}%", (1.0 - resonance) * 100.0)
-}
-
 pub fn seconds(value: f64) -> String {
     if value < 0.0 {
         return "-".to_string();
