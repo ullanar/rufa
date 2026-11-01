@@ -32,4 +32,4 @@ Open a pull request against `master`. Every commit message follows [Conventional
 
 ## License
 
-MIT. Game data belongs to Fendris Creations and ships under their license with [sde-patched](https://github.com/EVEShipFit/sde-patched).
+MIT. Game data belongs to Fenris Creations and ships under their license with [sde-patched](https://github.com/EVEShipFit/sde-patched).
