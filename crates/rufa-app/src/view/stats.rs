@@ -39,7 +39,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             defense(app, s, narrow),
         ),
     ]
-    .spacing(ui::SECTION_GAP);
+    .spacing(ui::GAP_ROW);
     let guns = s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps;
     if guns > 0.0 {
         col = col.push(ui::section(
@@ -802,7 +802,7 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
                 .color(theme::MUTED)
                 .width(Length::Fill),
             button(text("refresh").size(ui::MICRO))
-                .padding([0, 5])
+                .padding(ui::pill_tight(ui::GAP))
                 .style(theme::ghost)
                 .on_press(Message::RefreshPrices),
         ]

@@ -21,10 +21,14 @@ pub const LIST_ROW: f32 = 26.0;
 pub const TOOLBAR: f32 = 44.0;
 pub const STATUS: f32 = 26.0;
 
+/// Every inset picks one of these steps. A call site that needs space names a
+/// step; it does not invent a number.
+pub const TIGHT: f32 = 2.0;
 pub const GAP: f32 = 4.0;
 pub const GAP_ROW: f32 = 6.0;
 pub const PAD: f32 = 8.0;
-pub const SECTION_GAP: f32 = 6.0;
+pub const PAD_WIDE: f32 = 12.0;
+pub const PAD_CARD: f32 = 24.0;
 
 /// A pill's text sits on its cap height, and the line box keeps room for
 /// descenders below the baseline. Symmetric padding therefore reads as two
@@ -91,6 +95,17 @@ pub fn pill_tight(horizontal: f32) -> iced::Padding {
         top: 2.0,
         right: horizontal,
         bottom: 0.0,
+        left: horizontal,
+    }
+}
+
+/// A pill with the air a dialog or a toolbar asks for, keeping the same
+/// one-pixel lift off the baseline.
+pub fn pill_tall(horizontal: f32) -> iced::Padding {
+    iced::Padding {
+        top: 5.0,
+        right: horizontal,
+        bottom: 4.0,
         left: horizontal,
     }
 }
@@ -250,7 +265,7 @@ pub fn section_colored<'a>(
         body
     };
     container(column![head, inside].spacing(GAP))
-        .padding([6.0, PAD])
+        .padding([GAP_ROW, PAD])
         .width(Length::Fill)
         .style(theme::card)
         .into()

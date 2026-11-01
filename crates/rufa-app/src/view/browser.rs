@@ -77,7 +77,7 @@ fn list_button<'a>(app: &App, type_id: i32, label: String, msg: Message) -> El<'
         .spacing(ui::GAP_ROW)
         .align_y(iced::Alignment::Center),
     )
-    .padding([3, 8])
+    .padding(ui::pill(ui::PAD))
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
@@ -105,7 +105,7 @@ fn group_button<'a>(label: String, count: usize, msg: Message) -> El<'a> {
         .spacing(ui::GAP_ROW)
         .align_y(iced::Alignment::Center),
     )
-    .padding([3, 8])
+    .padding(ui::pill(ui::PAD))
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
@@ -118,7 +118,7 @@ fn back_button<'a>(label: String, msg: Message) -> El<'a> {
             .size(ui::BODY)
             .color(theme::ACCENT),
     )
-    .padding([3, 8])
+    .padding(ui::pill(ui::PAD))
     .width(Length::Fill)
     .style(theme::ghost)
     .on_press(msg)
@@ -199,7 +199,7 @@ fn hull_button<'a>(app: &App, name: &str, group: &str, id: i32) -> El<'a> {
         .spacing(ui::GAP)
         .align_y(iced::Alignment::Center),
     )
-    .padding([3, 8])
+    .padding(ui::pill(ui::PAD))
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(Message::NewFit(id))
@@ -286,7 +286,7 @@ fn fits(app: &App) -> El<'_> {
         ui::eyebrow("Saved fits").width(Length::Fill),
         ui::small(app.saved.len().to_string()),
         button(text("Import from Pyfa").size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(ui::PAD))
             .style(theme::secondary)
             .on_press(Message::ImportPyfa),
     ]
@@ -381,7 +381,7 @@ fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<
         .spacing(ui::GAP_ROW)
         .align_y(iced::Alignment::Center),
     )
-    .padding([3, 8])
+    .padding(ui::pill(ui::PAD))
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
@@ -417,11 +417,11 @@ fn fit_row<'a>(
     let action = |glyph: &'static str, hint: &'static str, msg: Message| {
         tooltip(
             button(text(glyph).size(ui::SMALL))
-                .padding([3, 6])
+                .padding(ui::pill(ui::GAP_ROW))
                 .style(theme::ghost)
                 .on_press(msg),
             container(text(hint).size(ui::SMALL))
-                .padding([4, 8])
+                .padding([ui::GAP, ui::PAD])
                 .style(theme::tooltip),
             tooltip::Position::Left,
         )
@@ -622,7 +622,7 @@ fn character(app: &App) -> El<'_> {
         "Log in with EVE"
     };
     let mut login = button(text(login_label).size(ui::SMALL))
-        .padding([4, 10])
+        .padding(ui::pill(ui::PAD_WIDE))
         .style(theme::primary);
     if !app.esi_pending {
         login = login.on_press(Message::EsiLogin);
@@ -677,7 +677,7 @@ fn character(app: &App) -> El<'_> {
             .padding(ui::field(4.0, 8.0))
             .style(theme::input),
         button(text("Delete").size(ui::SMALL))
-            .padding([3, 8])
+            .padding(ui::pill(ui::PAD))
             .style(theme::danger)
             .on_press(Message::DeleteCharacter),
     ]
@@ -686,11 +686,11 @@ fn character(app: &App) -> El<'_> {
     let bulk = row![
         ui::label("SET ALL TO"),
         button(text("0").size(ui::SMALL))
-            .padding([1, 7])
+            .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::secondary)
             .on_press(Message::AllSkillsTo(0)),
         button(text("5").size(ui::SMALL))
-            .padding([1, 7])
+            .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::secondary)
             .on_press(Message::AllSkillsTo(5)),
         text_input("Search skills", &app.skill_search)
@@ -713,7 +713,7 @@ fn character(app: &App) -> El<'_> {
         if skills.is_empty() {
             continue;
         }
-        list = list.push(container(ui::eyebrow(&group.name)).padding([6, 2]));
+        list = list.push(container(ui::eyebrow(&group.name)).padding([ui::GAP_ROW, ui::TIGHT]));
         for skill in skills {
             let level = current.skills.get(&skill.id).copied().unwrap_or(0);
             let mut levels = row![].spacing(1);
@@ -741,7 +741,7 @@ fn character(app: &App) -> El<'_> {
                     .spacing(ui::GAP)
                     .align_y(iced::Alignment::Center),
                 )
-                .padding([0, 2])
+                .padding([0.0, ui::TIGHT])
                 .height(ui::LIST_ROW),
             );
         }

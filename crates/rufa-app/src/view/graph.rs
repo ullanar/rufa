@@ -79,7 +79,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         if !builtin.iter().any(|b| b.name == p.name) {
             profiles = profiles.push(
                 button(text("\u{00d7}").size(ui::MICRO))
-                    .padding([1, 4])
+                    .padding(ui::pill_tight(ui::GAP))
                     .style(theme::ghost)
                     .on_press(Message::DeleteTargetProfile(i)),
             );
@@ -113,7 +113,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     }
     editor = editor.push(
         button(text("Save").size(ui::SMALL))
-            .padding([3, 10])
+            .padding(ui::pill(ui::PAD_WIDE))
             .style(theme::secondary)
             .on_press(Message::SaveTargetProfile),
     );

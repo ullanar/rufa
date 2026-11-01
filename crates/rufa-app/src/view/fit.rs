@@ -42,7 +42,7 @@ pub fn view(app: &App) -> El<'_> {
                     .size(ui::SMALL)
                     .color(if lit { theme::TEXT } else { theme::FAINT }),
             )
-            .padding([3, 5])
+            .padding(ui::pill(ui::GAP))
             .style(theme::ghost)
             .on_press(Message::CloseTab(i));
         tabs = tabs.push(
@@ -113,7 +113,7 @@ pub fn view(app: &App) -> El<'_> {
         return body;
     }
     let strip = container(ui::scroll_x(tabs))
-        .padding(2)
+        .padding(ui::TIGHT)
         .width(Length::Fill)
         .style(theme::rounded(theme::SUNKEN, 6.0));
     column![strip, body]
@@ -321,7 +321,7 @@ fn empty_row<'a>(label: String, rail: Color, rack: Option<Rack>) -> El<'a> {
         .align_y(iced::Alignment::Center),
     )
     .height(ui::ROW)
-    .padding([0, 4])
+    .padding([0.0, ui::GAP])
     .width(Length::Fill);
     // An empty slot is the shortest way to ask for a module that fits it.
     match rack {
@@ -392,7 +392,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                     .on_press(Message::SetMode(Some(mode))),
             );
         }
-        col = col.push(container(line).padding([4, 2]));
+        col = col.push(container(line).padding([ui::GAP, ui::TIGHT]));
     }
 
     for rack in Rack::ALL {
@@ -580,7 +580,7 @@ fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u
             theme::Pip::Blocked
         };
         let mut pip = button(space().width(8).height(8))
-            .padding(2)
+            .padding(ui::TIGHT)
             .style(theme::pip(state));
         if matches!(state, theme::Pip::Launched | theme::Pip::Open) {
             let want = if count == stack.launched {
@@ -676,14 +676,14 @@ fn drone_row<'a>(
     ));
     line = line.push(
         button(text("×").size(ui::SMALL))
-            .padding([1, 5])
+            .padding(ui::pill_tight(ui::GAP))
             .style(theme::ghost)
             .on_press(Message::DroneCarried(type_id, 0)),
     );
 
     mouse_area(
         container(line)
-            .padding([0, 4])
+            .padding([0.0, ui::GAP])
             .height(ui::ROW)
             .align_y(iced::Alignment::Center)
             .style(theme::row(selected, app.hovered_item == Some(first)))
@@ -730,7 +730,7 @@ fn step<'a>(glyph: &'static str, msg: Option<Message>) -> El<'a> {
         theme::DISABLED
     };
     let mut b = button(text(glyph).size(ui::SMALL).color(color))
-        .padding([1, 5])
+        .padding(ui::pill_tight(ui::GAP))
         .style(theme::ghost);
     if let Some(msg) = msg {
         b = b.on_press(msg);
@@ -796,7 +796,7 @@ pub fn violations<'a>(app: &'a App) -> El<'a> {
         }
     }
     container(body)
-        .padding([4, 10])
+        .padding([ui::GAP, ui::PAD])
         .width(Length::Fill)
         .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE))
         .into()
@@ -820,14 +820,14 @@ fn implant_sets(app: &App) -> El<'_> {
                     .style(theme::chip(false))
                     .on_press(Message::ApplyImplantSet(i)),
                 button(text("×").size(ui::SMALL))
-                    .padding([2, 4])
+                    .padding(ui::pill_tight(ui::GAP))
                     .style(theme::ghost)
                     .on_press(Message::DeleteImplantSet(i)),
             ]
             .align_y(iced::Alignment::Center),
         );
     }
-    container(line.wrap()).padding([8, 2]).into()
+    container(line.wrap()).padding([ui::PAD, ui::TIGHT]).into()
 }
 
 fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
@@ -863,7 +863,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
                     .padding(ui::field(4.0, 8.0))
                     .style(theme::picker),
             )
-            .padding([1, 2]),
+            .padding(ui::TIGHT),
         );
     }
     let mut tabs = row![ui::label("PROJECT FIT")]
@@ -883,7 +883,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         );
     }
     if any_tab {
-        col = col.push(container(tabs.wrap()).padding([2, 2]));
+        col = col.push(container(tabs.wrap()).padding(ui::TIGHT));
     }
     for (i, p) in doc.doc.projections.iter().enumerate() {
         if matches!(p, Projected::Beacon(_)) {
@@ -896,14 +896,14 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
                         .clip(true)
                         .width(Length::Fill),
                     button(text("×").size(ui::SMALL))
-                        .padding([2, 5])
+                        .padding(ui::pill_tight(ui::GAP))
                         .style(theme::ghost)
                         .on_press(Message::RemoveProjection(i)),
                 ]
                 .align_y(iced::Alignment::Center),
             )
             .height(ui::ROW)
-            .padding([0, 6]),
+            .padding([0.0, ui::GAP_ROW]),
         );
     }
     col.into()
@@ -981,11 +981,11 @@ fn item_row<'a>(
         space().width(18).into()
     } else if matches!(item.slot, Slot::Implant(_) | Slot::Booster(_)) {
         container(ui::state_glyph(State::Online))
-            .padding([0, 2])
+            .padding([0.0, ui::TIGHT])
             .into()
     } else {
         tooltip(
-            mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
+            mouse_area(container(ui::state_glyph(state)).padding([0.0, ui::TIGHT]))
                 .on_press(Message::CycleState(i))
                 .on_right_press(Message::ToggleOverload(i))
                 .on_middle_press(Message::ToggleOffline(i)),
@@ -1048,7 +1048,7 @@ fn item_row<'a>(
         };
         line = line.push(
             button(text("−").size(ui::SMALL))
-                .padding([1, 5])
+                .padding(ui::pill_tight(ui::GAP))
                 .style(theme::ghost)
                 .on_press(Message::Quantity(i, item.quantity.saturating_sub(1))),
         );
@@ -1064,7 +1064,7 @@ fn item_row<'a>(
         );
         line = line.push(
             button(text("+").size(ui::SMALL))
-                .padding([1, 5])
+                .padding(ui::pill_tight(ui::GAP))
                 .style(theme::ghost)
                 .on_press(Message::Quantity(i, item.quantity + 1)),
         );
@@ -1074,7 +1074,7 @@ fn item_row<'a>(
     let hovered = app.hovered_item == Some(i) || selected;
     let remove: El<'a> = if hovered {
         button(text("×").size(ui::SMALL))
-            .padding([1, 5])
+            .padding(ui::pill_tight(ui::GAP))
             .style(theme::ghost)
             .on_press(Message::RemoveItem(i))
             .into()
@@ -1085,7 +1085,7 @@ fn item_row<'a>(
 
     mouse_area(
         container(line)
-            .padding([0, 4])
+            .padding([0.0, ui::GAP])
             .height(ui::ROW)
             .align_y(iced::Alignment::Center)
             .style(theme::row(
@@ -1125,7 +1125,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
     };
     let entry = |label: String, msg: Message| {
         button(text(label).size(ui::BODY).width(Length::Fill))
-            .padding([3, 8])
+            .padding(ui::pill(ui::PAD))
             .width(Length::Fill)
             .style(theme::list_item(false))
             .on_press(msg)

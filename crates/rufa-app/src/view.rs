@@ -72,11 +72,11 @@ fn install_screen(app: &App) -> Element<'_, Message> {
             card = card.push(
                 row![
                     button(text("Start Rufa").size(ui::SMALL))
-                        .padding([3, 10])
+                        .padding(ui::pill_tall(ui::PAD_WIDE))
                         .style(theme::primary)
                         .on_press(Message::SetupLaunch),
                     button(text("Close").size(ui::SMALL))
-                        .padding([3, 10])
+                        .padding(ui::pill_tall(ui::PAD_WIDE))
                         .style(theme::ghost)
                         .on_press(Message::SetupSkip),
                 ]
@@ -100,7 +100,7 @@ fn install_screen(app: &App) -> Element<'_, Message> {
             card = card.push(
                 text_input("install directory", &app.setup_dir)
                     .on_input(Message::SetupDir)
-                    .padding(6)
+                    .padding(ui::GAP_ROW)
                     .size(ui::SMALL),
             );
             if let Some(error) = &app.setup_error {
@@ -121,11 +121,11 @@ fn install_screen(app: &App) -> Element<'_, Message> {
                         })
                         .size(ui::SMALL)
                     )
-                    .padding([3, 10])
+                    .padding(ui::pill_tall(ui::PAD_WIDE))
                     .style(theme::primary)
                     .on_press(Message::SetupInstall),
                     button(text("Run without installing").size(ui::SMALL))
-                        .padding([3, 10])
+                        .padding(ui::pill_tall(ui::PAD_WIDE))
                         .style(theme::ghost)
                         .on_press(Message::SetupSkip),
                 ]
@@ -192,7 +192,7 @@ fn update_window(app: &App) -> El<'_> {
 
 fn notes_link<'a>(label: &'a str) -> El<'a> {
     button(text(label).size(ui::SMALL))
-        .padding([2, 0])
+        .padding(ui::pill_tight(0.0))
         .style(theme::link)
         .on_press(Message::ReleaseNotes)
         .into()
@@ -209,13 +209,13 @@ fn update_buttons(app: &App) -> El<'_> {
     if let Some(tag) = &app.update_ready {
         line = line.push(
             button(text(format!("Restart into {tag}")).size(ui::SMALL))
-                .padding([3, 10])
+                .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::primary)
                 .on_press(Message::Restart),
         );
         line = line.push(
             button(text("Later").size(ui::SMALL))
-                .padding([3, 10])
+                .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::ghost)
                 .on_press(Message::UpdateLater),
         );
@@ -230,7 +230,7 @@ fn update_buttons(app: &App) -> El<'_> {
             })
             .size(ui::SMALL),
         )
-        .padding([3, 10])
+        .padding(ui::pill_tall(ui::PAD_WIDE))
         .style(theme::primary);
         line = line.push(if app.update_busy {
             now
@@ -239,13 +239,13 @@ fn update_buttons(app: &App) -> El<'_> {
         });
         line = line.push(
             button(text("Next time").size(ui::SMALL))
-                .padding([3, 10])
+                .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::secondary)
                 .on_press(Message::UpdateLater),
         );
         line = line.push(
             button(text("Skip this version").size(ui::SMALL))
-                .padding([3, 10])
+                .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::ghost)
                 .on_press(Message::UpdateSkip),
         );
@@ -253,7 +253,7 @@ fn update_buttons(app: &App) -> El<'_> {
     }
     line.push(
         button(text("Close").size(ui::SMALL))
-            .padding([3, 10])
+            .padding(ui::pill_tall(ui::PAD_WIDE))
             .style(theme::secondary)
             .on_press(Message::UpdateLater),
     )
@@ -336,13 +336,13 @@ fn first_run(app: &App) -> El<'_> {
                 ]
                 .spacing(4),
             )
-            .padding([8, 12])
+            .padding([ui::PAD, ui::PAD_WIDE])
             .width(Length::Fill)
             .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE)),
         );
         card = card.push(
             button(text("Try again").size(ui::BODY))
-                .padding([6, 14])
+                .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::primary)
                 .on_press(Message::RetryDownload),
         );
@@ -352,7 +352,7 @@ fn first_run(app: &App) -> El<'_> {
             rufa_data::data_dir().display()
         )));
     }
-    container(container(card).padding(28).style(theme::card))
+    container(container(card).padding(ui::PAD_CARD).style(theme::card))
         .center(Length::Fill)
         .into()
 }
@@ -441,7 +441,7 @@ fn toolbar(app: &App) -> El<'_> {
     let has_fit = !app.docs.is_empty();
     let action = |label: &'static str, msg: Message| {
         let b = button(text(label).size(ui::BODY))
-            .padding([4, 10])
+            .padding(ui::pill_tall(ui::PAD))
             .style(theme::ghost);
         if has_fit { b.on_press(msg) } else { b }
     };
@@ -457,7 +457,7 @@ fn toolbar(app: &App) -> El<'_> {
                 .size(ui::VALUE)
                 .color(theme::ACCENT)
         )
-        .padding([0, 6]),
+        .padding([0.0, ui::GAP_ROW]),
         text_input("Fit name", &name)
             .on_input(Message::RenameFit)
             .width(260)
@@ -469,7 +469,7 @@ fn toolbar(app: &App) -> El<'_> {
         action("Redo", Message::Redo),
         action("Copy EFT", Message::CopyEft),
         button(text("Paste EFT").size(ui::BODY))
-            .padding([4, 10])
+            .padding(ui::pill_tall(ui::PAD))
             .style(theme::ghost)
             .on_press(Message::PasteEft),
     ]
@@ -516,27 +516,27 @@ fn status_bar(app: &App) -> El<'_> {
     bar = bar.push(ui::label("ZOOM"));
     bar = bar.push(
         button(text("−").size(ui::SMALL))
-            .padding([1, 7])
+            .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
             .on_press(Message::UiScale(scale - 0.1)),
     );
     bar = bar.push(ui::small(format!("{:.0}%", scale * 100.0)));
     bar = bar.push(
         button(text("+").size(ui::SMALL))
-            .padding([1, 7])
+            .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
             .on_press(Message::UiScale(scale + 0.1)),
     );
     bar = bar.push(
         button(text("Check for updates").size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(ui::PAD))
             .style(theme::ghost)
             .on_press(Message::CheckUpdate),
     );
     if let Some(tag) = &app.sde_update {
         bar = bar.push(
             button(text(format!("Update game data to {tag}")).size(ui::SMALL))
-                .padding([2, 8])
+                .padding(ui::pill(ui::PAD))
                 .style(theme::secondary)
                 .on_press(Message::UpdateSde),
         );
