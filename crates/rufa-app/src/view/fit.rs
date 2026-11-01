@@ -1014,7 +1014,14 @@ fn item_row<'a>(
         )
         .clip(true)
         .width(Length::Fill),
-        charge_cell(i, charge, charge_width),
+        charge_cell(
+            i,
+            charge,
+            charge_width,
+            item.charge
+                .as_ref()
+                .and_then(|c| app.icon(Kind::Icon, c.type_id)),
+        ),
         info_cell(
             if compact {
                 Vec::new()
@@ -1327,16 +1334,29 @@ fn state_name(state: State) -> &'static str {
     }
 }
 
-fn charge_cell<'a>(i: usize, charge: String, width: f32) -> El<'a> {
+fn charge_cell<'a>(i: usize, charge: String, width: f32, icon: Option<image::Handle>) -> El<'a> {
     if charge.is_empty() {
         return space().width(width).into();
     }
+    let picture: El<'a> = match icon {
+        Some(handle) => image(handle).width(14).height(14).into(),
+        None => space().width(14).height(14).into(),
+    };
     mouse_area(
         container(
-            text(ui::clip(&charge, (width / 6.0) as usize))
-                .size(ui::SMALL)
-                .color(theme::TEXT_SECONDARY)
-                .wrapping(text::Wrapping::None),
+            row![
+                picture,
+                container(
+                    text(ui::clip(&charge, ((width - 18.0) / 6.0) as usize))
+                        .size(ui::SMALL)
+                        .color(theme::TEXT_SECONDARY)
+                        .wrapping(text::Wrapping::None),
+                )
+                .clip(true)
+                .width(Length::Fill),
+            ]
+            .spacing(3)
+            .align_y(iced::Alignment::Center),
         )
         .clip(true)
         .width(width),
