@@ -219,26 +219,21 @@ fn resist_cell<'a>(resonance: f64, color: Color, narrow: bool) -> El<'a> {
     .into()
 }
 
-fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool) -> El<'a> {
+fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool, ehp: bool) -> El<'a> {
     row![
-        row![
+        container(
             text(name)
                 .size(ui::SMALL)
                 .color(theme::TEXT_SECONDARY)
                 .wrapping(text::Wrapping::None)
-                .width(Length::Fill),
-            text(fmt::short(l.hp))
-                .size(ui::MICRO)
-                .color(theme::MUTED)
-                .wrapping(text::Wrapping::None),
-        ]
-        .spacing(2)
+        )
+        .clip(true)
         .width(72),
         resist_cell(l.em, theme::EM, narrow),
         resist_cell(l.thermal, theme::THERMAL, narrow),
         resist_cell(l.kinetic, theme::KINETIC, narrow),
         resist_cell(l.explosive, theme::EXPLOSIVE, narrow),
-        text(fmt::short(l.ehp))
+        text(fmt::short(if ehp { l.ehp } else { l.hp }))
             .size(ui::SMALL)
             .font(theme::UI_MEDIUM)
             .color(theme::TEXT)
@@ -273,29 +268,36 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
             .width(Length::Fill)
             .align_x(iced::alignment::Horizontal::Center)
     };
+    let unit = |label: &'static str, ehp: bool| {
+        button(text(label).size(ui::MICRO))
+            .padding(ui::pill_tight(6.0))
+            .style(theme::chip(app.show_ehp == ehp))
+            .on_press(Message::ShowEhp(ehp))
+    };
     let header = row![
-        space().width(72),
+        row![unit("HP", false), unit("EHP", true)]
+            .spacing(2)
+            .width(72),
         head("EM", theme::EM),
         head("TH", theme::THERMAL),
         head("KI", theme::KINETIC),
         head("EX", theme::EXPLOSIVE),
-        ui::label("EHP")
+        ui::label(if app.show_ehp { "EHP" } else { "HP" })
             .width(48)
             .align_x(iced::alignment::Horizontal::Right),
     ]
-    .spacing(ui::GAP);
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center);
+    // One number in the unit the pane is set to, the way Pyfa does it. Two
+    // numbers side by side read as two different facts, which they are not.
     let rep = |name: &'static str, raw: f64, effective: f64| -> El<'a> {
         if raw <= 0.0 && effective <= 0.0 {
             return space().height(0).into();
         }
-        let shown = if narrow {
+        let shown = if app.show_ehp {
             format!("{} EHP/s", fmt::num(effective, 1))
         } else {
-            format!(
-                "{} HP/s · {} EHP/s",
-                fmt::num(raw, 1),
-                fmt::num(effective, 1)
-            )
+            format!("{} HP/s", fmt::num(raw, 1))
         };
         ui::stat_row(narrow, name, shown)
     };
@@ -303,9 +305,9 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
         presets.wrap(),
         header,
         column![
-            layer_row("Shield", &d.shield, narrow),
-            layer_row("Armor", &d.armor, narrow),
-            layer_row("Hull", &d.hull, narrow),
+            layer_row("Shield", &d.shield, narrow, app.show_ehp),
+            layer_row("Armor", &d.armor, narrow, app.show_ehp),
+            layer_row("Hull", &d.hull, narrow, app.show_ehp),
         ]
         .spacing(6),
         ui::rule(),
@@ -598,50 +600,51 @@ fn small_owned<'a>(s: String) -> text::Text<'a> {
 fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     let c = &s.capacitor;
     let sim = &doc.doc.cap;
-    let (stability, color) = if c.stable_pct > 0.0 {
-        (
-            format!("Stable at {:.1}%", c.stable_pct),
-            theme::SUCCESS_TEXT,
-        )
-    } else {
-        (
-            format!("Lasts {}", fmt::seconds(c.depletes_in)),
-            theme::WARNING_TEXT,
-        )
-    };
-    let simulated = match sim.depleted_at {
-        Some(t) => format!("lasts {}", fmt::seconds(t)),
-        None if c.capacity > 0.0 => format!("stable, low {:.0}%", sim.low / c.capacity * 100.0),
-        None => "-".to_string(),
-    };
+    // One verdict, from the simulation. The rows under it are the inputs that
+    // produced it, never a second opinion.
     let level = if c.capacity > 0.0 {
         (sim.low / c.capacity) as f32
     } else {
         0.0
     };
-    let bar_color = if sim.depleted_at.is_some() {
-        theme::GAUGE_OVER
+    let (verdict, color) = match sim.depleted_at {
+        Some(t) => (format!("Empty in {}", fmt::seconds(t)), theme::DANGER_TEXT),
+        None => (
+            format!("Holds, never below {:.0}%", level * 100.0),
+            theme::SUCCESS_TEXT,
+        ),
+    };
+    let net = c.peak_delta;
+    let net_color = if net >= 0.0 {
+        theme::SUCCESS_TEXT
     } else {
-        theme::ACCENT_LINE
+        theme::DANGER_TEXT
     };
     column![
-        ui::stat_row_colored(narrow, "Stability", stability, color),
+        text(verdict)
+            .size(ui::SMALL)
+            .font(theme::UI_MEDIUM)
+            .color(color),
         ui::bar(
             if sim.depleted_at.is_some() {
                 0.0
             } else {
                 level.max(0.02)
             },
-            bar_color,
+            if sim.depleted_at.is_some() {
+                theme::GAUGE_OVER
+            } else {
+                theme::ACCENT_LINE
+            },
             4.0
         ),
-        ui::stat_row_colored(narrow, "Simulated", simulated, bar_color),
+        ui::rule(),
         ui::stat_row(
             narrow,
             "Capacity",
             format!("{} GJ", fmt::num(c.capacity, 1))
         ),
-        ui::stat_row(narrow, "Recharge time", fmt::seconds(c.recharge_time)),
+        ui::stat_row(narrow, "Recharge", fmt::seconds(c.recharge_time)),
         ui::stat_row(
             narrow,
             "Peak recharge",
@@ -649,13 +652,18 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
         ),
         ui::stat_row(
             narrow,
-            "Peak load",
+            "Modules draw",
             format!("{} GJ/s", fmt::num(c.peak_load, 2))
         ),
-        ui::stat_row(
+        ui::stat_row_colored(
             narrow,
-            "Delta",
-            format!("{} GJ/s", fmt::num(c.peak_delta, 2))
+            "Left over",
+            format!(
+                "{}{} GJ/s",
+                if net >= 0.0 { "+" } else { "" },
+                fmt::num(net, 2)
+            ),
+            net_color
         ),
     ]
     .spacing(2)
@@ -682,7 +690,7 @@ fn navigation(s: &Stats, narrow: bool) -> El<'_> {
             format!("{} AU/s", fmt::num(n.warp_speed, 2))
         ),
         ui::stat_row(narrow, "Mass", format!("{} kg", fmt::short(n.mass))),
-        ui::stat_row(narrow, "Inertia modifier", fmt::num(n.agility, 3)),
+        ui::stat_row(narrow, "Agility", fmt::num(n.agility, 3)),
     ]
     .spacing(2);
     if n.max_warp_distance > 0.0 {
