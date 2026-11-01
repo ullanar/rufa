@@ -29,7 +29,7 @@ impl Document {
         let start = Instant::now();
         let calc = crate::calculate(info, &fit);
         Document {
-            stats: Stats::from_calc(info, ids, &fit, &calc),
+            stats: Stats::from_calc(info, ids, &fit, &calc, &projection::Incoming::default()),
             layout: SlotLayout::from_calc(ids, &calc),
             cap: crate::cap::simulate_fit(ids, &fit, &calc, CAP_HORIZON),
             last_calc: start.elapsed(),
@@ -90,9 +90,10 @@ impl Document {
 
     pub fn recalc(&mut self, info: &impl Info, ids: &AttrIds) {
         let start = Instant::now();
-        self.fit.incoming = projection::incoming(info, ids, &self.fit, &self.projections);
+        let incoming = projection::incoming(info, ids, &self.fit, &self.projections);
+        self.fit.incoming = incoming.projection.clone();
         self.calc = crate::calculate(info, &self.fit);
-        self.stats = Stats::from_calc(info, ids, &self.fit, &self.calc);
+        self.stats = Stats::from_calc(info, ids, &self.fit, &self.calc, &incoming);
         self.layout = SlotLayout::from_calc(ids, &self.calc);
         self.cap = crate::cap::simulate_fit(ids, &self.fit, &self.calc, CAP_HORIZON);
         self.last_calc = start.elapsed();

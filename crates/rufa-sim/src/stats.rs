@@ -49,7 +49,10 @@ pub const HOLDS: [(&str, &str); 21] = [
     ("Large ship hold", "specialLargeShipHoldCapacity"),
     ("Industrial ship hold", "specialIndustrialShipHoldCapacity"),
     ("Command center hold", "specialCommandCenterHoldCapacity"),
-    ("Planetary goods hold", "specialPlanetaryCommoditiesHoldCapacity"),
+    (
+        "Planetary goods hold",
+        "specialPlanetaryCommoditiesHoldCapacity",
+    ),
     ("Infrastructure hold", "specialColonyResourcesHoldCapacity"),
     ("Mobile depot hold", "specialMobileDepotHoldCapacity"),
     ("Expedition hold", "specialExpeditionHoldCapacity"),
@@ -81,6 +84,7 @@ pub struct Defense {
     pub armor_effective_repair_rate: f64,
     pub hull_effective_repair_rate: f64,
     pub sustained: Sustained,
+    pub bombs: [f64; 4],
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -91,6 +95,7 @@ pub struct Offense {
     pub drone_dps: f64,
     pub fighter_dps: f64,
     pub damage: [f64; 4],
+    pub dps_spooled: f64,
 }
 
 pub const DAMAGE_NAMES: [&str; 4] = ["EM", "Thermal", "Kinetic", "Explosive"];
@@ -136,6 +141,7 @@ pub struct Targeting {
     pub sensor_type: &'static str,
     pub drone_control_range: f64,
     pub lock_times: [f64; TARGET_CLASSES.len()],
+    pub jam_chance: f64,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -147,6 +153,7 @@ pub struct Stats {
     pub navigation: Navigation,
     pub targeting: Targeting,
     pub remote: Remote,
+    pub incoming: Remote,
     pub mining: Mining,
 }
 
@@ -170,6 +177,75 @@ fn lock_time(scan_resolution: f64, signature: f64) -> f64 {
         return 0.0;
     }
     (40_000.0 / scan_resolution / signature.asinh().powi(2)).min(1800.0)
+}
+
+/// Bombs of one damage type it takes to strip the fit, at Covert Ops V.
+fn bombs_to_kill(info: &impl Info, ids: &AttrIds, defense: &Defense, signature: f64) -> [f64; 4] {
+    const COVERT_OPS_V: f64 = 1.25;
+    let mut out = [0.0; 4];
+    if signature <= 0.0 {
+        return out;
+    }
+    for (index, bomb) in rufa_data::catalog::bomb::ALL.into_iter().enumerate() {
+        let attributes = info.get_dogma_attributes(bomb);
+        let value = |id: i32| {
+            attributes
+                .iter()
+                .flatten()
+                .find(|a| a.attribute_id() == id)
+                .map(|a| f64::from(a.value()))
+                .unwrap_or(0.0)
+        };
+        let damage = value(ids.em_damage)
+            + value(ids.thermal_damage)
+            + value(ids.kinetic_damage)
+            + value(ids.explosive_damage);
+        let blast = value(ids.aoe_cloud_size);
+        if damage <= 0.0 || blast <= 0.0 {
+            continue;
+        }
+        let applied = damage * COVERT_OPS_V * (signature / blast).min(1.0);
+        let ehp: f64 = [&defense.shield, &defense.armor, &defense.hull]
+            .into_iter()
+            .map(|layer| {
+                let resonance = [layer.em, layer.thermal, layer.kinetic, layer.explosive][index];
+                layer.hp / resonance.max(1e-3)
+            })
+            .sum();
+        out[index] = (ehp / applied * 10.0).ceil() / 10.0;
+    }
+    out
+}
+
+fn jam_chance(strength: f64, sensor: usize, jammers: &[[f64; 4]]) -> f64 {
+    if strength <= 0.0 || jammers.is_empty() {
+        return 0.0;
+    }
+    let keeps_lock = jammers.iter().fold(1.0, |chance, jam| {
+        chance * (1.0 - (jam[sensor] / strength).min(1.0))
+    });
+    (1.0 - keeps_lock) * 100.0
+}
+
+/// Weapon damage once a spooling weapon has run up to its maximum.
+fn spooled_dps(ids: &AttrIds, fit: &Fit, calc: &Calculation, dps: f64) -> f64 {
+    let mut plain = 0.0;
+    let mut spooled = 0.0;
+    for (item, result) in fit.items.iter().zip(&calc.items) {
+        if result.state < State::Active || Rack::of_slot(item.slot).is_none() {
+            continue;
+        }
+        let shot = attr(result, ids.dps);
+        if shot <= 0.0 {
+            continue;
+        }
+        plain += shot;
+        spooled += shot * (1.0 + attr(result, ids.damage_multiplier_bonus_max));
+    }
+    if plain <= 0.0 || spooled <= plain {
+        return dps;
+    }
+    dps * spooled / plain
 }
 
 fn damage_split(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> [f64; 4] {
@@ -212,6 +288,7 @@ impl Stats {
         ids: &AttrIds,
         fit: &Fit,
         calc: &Calculation,
+        incoming: &crate::projection::Incoming,
     ) -> Stats {
         let ship = &calc.ship;
         let a = |id: i32| attr(ship, id);
@@ -251,11 +328,19 @@ impl Stats {
             (a(ids.scan_magnetometric), "Magnetometric"),
             (a(ids.scan_gravimetric), "Gravimetric"),
         ];
-        let (sensor_strength, sensor_type) = sensors
-            .into_iter()
-            .fold((0.0, ""), |best, s| if s.0 > best.0 { s } else { best });
+        let (sensor_strength, sensor_type, sensor_index) =
+            sensors
+                .into_iter()
+                .enumerate()
+                .fold((0.0, "", 0), |best, (index, s)| {
+                    if s.0 > best.0 {
+                        (s.0, s.1, index)
+                    } else {
+                        best
+                    }
+                });
 
-        Stats {
+        let mut stats = Stats {
             resources: Resources {
                 cpu_used: a(ids.cpu_load),
                 cpu_total: a(ids.cpu_output),
@@ -318,6 +403,7 @@ impl Stats {
                 armor_effective_repair_rate: a(ids.armor_effective_repair_rate),
                 hull_effective_repair_rate: a(ids.hull_effective_repair_rate),
                 sustained: crate::repair::sustained(info, ids, fit, calc),
+                bombs: [0.0; 4],
             },
             offense: Offense {
                 dps: a(ids.dps),
@@ -326,6 +412,7 @@ impl Stats {
                 drone_dps: a(ids.drone_dps),
                 fighter_dps: a(ids.fighter_dps),
                 damage: damage_split(ids, fit, calc),
+                dps_spooled: spooled_dps(ids, fit, calc, a(ids.dps)),
             },
             capacitor: Capacitor {
                 capacity: a(ids.capacitor_capacity),
@@ -353,9 +440,14 @@ impl Stats {
                 sensor_type,
                 drone_control_range: attr(&calc.character, ids.drone_control_distance),
                 lock_times,
+                jam_chance: jam_chance(sensor_strength, sensor_index, &incoming.jammers),
             },
             remote: crate::repair::outgoing(info, ids, fit, calc),
+            incoming: incoming.reps,
             mining: crate::mining::yields(ids, fit, calc),
-        }
+        };
+        stats.defense.bombs =
+            bombs_to_kill(info, ids, &stats.defense, stats.navigation.signature_radius);
+        stats
     }
 }
