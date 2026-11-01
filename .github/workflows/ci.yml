@@ -48,9 +48,13 @@ jobs:
           fetch-depth: 0
       - env:
           BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ -z "$BASE" ]; then
             BASE=$(git merge-base origin/master HEAD)
+          fi
+          if [ -z "$HEAD_SHA" ]; then
+            HEAD_SHA=HEAD
           fi
           pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?: .+'
           status=0
@@ -61,7 +65,7 @@ jobs:
               echo "bad  $subject"
               status=1
             fi
-          done < <(git log --format=%s "$BASE"..HEAD)
+          done < <(git log --no-merges --format=%s "$BASE".."$HEAD_SHA")
           exit "$status"
 
   check:
