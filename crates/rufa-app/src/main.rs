@@ -234,6 +234,7 @@ pub enum Message {
     IconsFetched(Vec<(Kind, i32, PathBuf)>),
     LatestTag(Result<String, String>),
     UpdateSde,
+    ToggleViolations,
     ApplyImplantSet(usize),
     EsiClientId(String),
     EsiLogin,
@@ -294,6 +295,7 @@ pub struct App {
     pub prices: PriceCache,
     pub prices_pending: bool,
     pub sde_update: Option<String>,
+    pub violations_open: bool,
     pub implant_sets: Vec<ImplantSet>,
     pub target_name: String,
     pub target_resists: [String; 4],
@@ -369,6 +371,7 @@ impl App {
             prices: PriceCache::default(),
             prices_pending: false,
             sde_update: None,
+            violations_open: false,
             implant_sets: Vec::new(),
             target_name: String::new(),
             target_resists: Default::default(),
@@ -1412,6 +1415,7 @@ impl App {
                     }
                 }
             }
+            Message::ToggleViolations => self.violations_open = !self.violations_open,
             Message::EsiClientId(id) => {
                 self.settings.esi_client_id = id.trim().to_string();
                 let _ = self.settings.save(&self.config_dir);

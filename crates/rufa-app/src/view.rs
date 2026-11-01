@@ -38,6 +38,7 @@ pub fn root(app: &App) -> Element<'_, Message> {
             .width(Length::Fill)
             .height(Length::Fill)
             .padding([0.0, ui::GAP]),
+        container(fit::violations(app)).padding([0.0, ui::GAP]),
         status_bar(app),
     ]
     .spacing(ui::GAP)

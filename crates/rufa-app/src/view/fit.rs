@@ -88,13 +88,10 @@ pub fn view(app: &App) -> El<'_> {
                         .into(),
                 );
             }
-            column![
-                stack(layers).width(Length::Fill).height(Length::Fill),
-                violations(app, doc),
-            ]
-            .spacing(ui::GAP_ROW)
-            .height(Length::Fill)
-            .into()
+            stack(layers)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
         })
         .into(),
         None => container(
@@ -698,39 +695,65 @@ fn step<'a>(glyph: &'static str, msg: Option<Message>) -> El<'a> {
     b.into()
 }
 
-fn violations<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
-    let list = doc.doc.calc.violations.as_deref().unwrap_or(&[]);
-    if list.is_empty() {
+/// A strip above the status bar: the count and the first problem, with the
+/// whole list one click away. Absent when the fit is legal.
+pub fn violations<'a>(app: &'a App) -> El<'a> {
+    let Some(doc) = app.docs.get(app.active) else {
         return space().height(0).into();
-    }
-    let mut lines = column![].spacing(2);
-    let head = if list.len() == 1 {
+    };
+    let list = doc.doc.calc.violations.as_deref().unwrap_or(&[]);
+    let Some(first) = list.first() else {
+        return space().height(0).into();
+    };
+    let count = if list.len() == 1 {
         "1 problem".to_string()
     } else {
         format!("{} problems", list.len())
     };
-    lines = lines.push(
-        text(head)
+    let head = row![
+        text("\u{25b2}").size(ui::SMALL).color(theme::DANGER_TEXT),
+        text(count)
             .font(theme::UI_MEDIUM)
-            .size(ui::BODY)
-            .color(theme::DANGER_TEXT),
-    );
-    for v in list.iter().take(4) {
-        lines = lines.push(
-            text(app.describe_violation(v))
-                .size(ui::SMALL)
-                .color(theme::DANGER_TEXT),
-        );
+            .size(ui::SMALL)
+            .color(theme::DANGER_TEXT)
+            .wrapping(text::Wrapping::None),
+        text(app.describe_violation(first))
+            .size(ui::SMALL)
+            .color(theme::DANGER_TEXT)
+            .width(Length::Fill)
+            .wrapping(text::Wrapping::None),
+        text(if app.violations_open {
+            "\u{25b4}"
+        } else {
+            "\u{25be}"
+        })
+        .size(ui::SMALL)
+        .color(theme::DANGER_TEXT),
+    ]
+    .spacing(ui::GAP_ROW)
+    .align_y(iced::Alignment::Center);
+    let mut body = column![
+        button(head)
+            .padding(0)
+            .style(theme::bare)
+            .on_press(Message::ToggleViolations)
+    ]
+    .spacing(2);
+    if app.violations_open {
+        for v in list.iter().skip(1) {
+            body = body.push(
+                row![
+                    space().width(ui::SMALL),
+                    text(app.describe_violation(v))
+                        .size(ui::SMALL)
+                        .color(theme::DANGER_TEXT),
+                ]
+                .spacing(ui::GAP_ROW),
+            );
+        }
     }
-    if list.len() > 4 {
-        lines = lines.push(
-            text(format!("and {} more", list.len() - 4))
-                .size(ui::SMALL)
-                .color(theme::DANGER_TEXT),
-        );
-    }
-    container(lines)
-        .padding([6, 10])
+    container(body)
+        .padding([4, 10])
         .width(Length::Fill)
         .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE))
         .into()

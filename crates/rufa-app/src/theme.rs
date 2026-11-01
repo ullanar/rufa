@@ -235,6 +235,14 @@ pub fn ghost(_theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+pub fn bare(_theme: &Theme, _status: button::Status) -> button::Style {
+    button::Style {
+        background: None,
+        text_color: TEXT,
+        ..button::Style::default()
+    }
+}
+
 pub fn danger(_theme: &Theme, status: button::Status) -> button::Style {
     match status {
         button::Status::Hovered => flat(Some(rgb(0x3D2227)), DANGER_TEXT, Some(DANGER_LINE), 4.0),
