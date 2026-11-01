@@ -123,7 +123,7 @@ impl Stats {
             .zip(&calc.items)
             .filter(|(it, _)| it.slot == Slot::Cargo)
             .map(|(it, res)| attr(res, ids.volume) * it.quantity as f64)
-            .sum();
+            .fold(0.0, |total, volume| total + volume);
 
         let sensors = [
             (a(ids.scan_radar), "Radar"),
@@ -143,12 +143,12 @@ impl Stats {
                 power_total: a(ids.power_output),
                 calibration_used: a(ids.upgrade_load),
                 calibration_total: a(ids.upgrade_capacity),
-                drone_bandwidth_used: a(ids.drone_bandwidth_used),
+                drone_bandwidth_used: a(ids.drone_bandwidth_load),
                 drone_bandwidth_total: a(ids.drone_bandwidth),
                 drone_bay_used: a(ids.drone_capacity_load),
                 drone_bay_total: a(ids.drone_capacity),
                 drones_active: a(ids.drone_active),
-                drones_max: a(ids.max_active_drones),
+                drones_max: attr(&calc.character, ids.max_active_drones),
                 turrets_free: a(ids.turret_slots_left),
                 launchers_free: a(ids.launcher_slots_left),
                 cargo_used,
