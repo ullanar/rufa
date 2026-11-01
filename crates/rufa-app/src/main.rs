@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod fmt;
+mod setup;
 mod theme;
 mod ui;
 mod view;
@@ -43,6 +44,10 @@ fn main() -> iced::Result {
                 None,
             )
             .ok(),
+            platform_specific: iced::window::settings::PlatformSpecific {
+                application_id: setup::APP_ID.to_string(),
+                ..Default::default()
+            },
             ..Default::default()
         })
         .default_font(theme::UI)
@@ -251,6 +256,10 @@ pub enum Message {
     UpdateLater,
     UpdateSkip,
     ReleaseNotes,
+    SetupDir(String),
+    SetupInstall,
+    SetupSkip,
+    SetupLaunch,
     Restart,
     ApplyImplantSet(usize),
     EsiClientId(String),
@@ -319,6 +328,11 @@ pub struct App {
     pub update_busy: bool,
     pub update_ready: Option<String>,
     pub update_error: Option<String>,
+    pub setup_prompt: bool,
+    pub setup_dir: String,
+    pub setup_done: Option<PathBuf>,
+    pub setup_error: Option<String>,
+    pub setup_replacing: bool,
     pub implant_sets: Vec<ImplantSet>,
     pub target_name: String,
     pub target_resists: [String; 4],
@@ -402,6 +416,11 @@ impl App {
             update_busy: false,
             update_ready: None,
             update_error: None,
+            setup_prompt: false,
+            setup_dir: String::new(),
+            setup_done: None,
+            setup_error: None,
+            setup_replacing: false,
             implant_sets: Vec::new(),
             target_name: String::new(),
             target_resists: Default::default(),
@@ -417,6 +436,7 @@ impl App {
             app.status = format!("Getting the game data into {}", data_dir.display());
             return (app, download_task(data_dir));
         }
+        app.open_setup();
         app.load_game(&data_dir);
         app.open_args();
         let prices = Task::batch([app.fetch_prices(), app.fetch_icons()]);
@@ -425,6 +445,26 @@ impl App {
             Message::LatestTag,
         );
         (app, Task::batch([prices, check, release_check()]))
+    }
+
+    fn open_setup(&mut self) {
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        if setup::in_a_build_tree(&exe) || setup::running_installed(&exe, &self.config_dir) {
+            return;
+        }
+        let recorded = setup::recorded(&self.config_dir);
+        self.setup_replacing = recorded.is_some();
+        let dir = match recorded.as_ref().and_then(|path| path.parent()) {
+            Some(dir) => dir.to_path_buf(),
+            None => match setup::default_dir() {
+                Some(dir) => dir,
+                None => return,
+            },
+        };
+        self.setup_dir = dir.to_string_lossy().to_string();
+        self.setup_prompt = true;
     }
 
     fn sweep_leftovers() {
@@ -1516,6 +1556,34 @@ impl App {
                     }
                 }
             }
+            Message::SetupDir(dir) => {
+                self.setup_dir = dir;
+                self.setup_error = None;
+            }
+            Message::SetupInstall => {
+                let Ok(exe) = std::env::current_exe() else {
+                    self.setup_error = Some("cannot find the running build".to_string());
+                    return Task::none();
+                };
+                let dir = PathBuf::from(self.setup_dir.trim());
+                match setup::install(&exe, &dir, &self.config_dir) {
+                    Ok(placed) => {
+                        self.setup_error = None;
+                        self.setup_done = Some(placed);
+                    }
+                    Err(e) => self.setup_error = Some(e.to_string()),
+                }
+            }
+            Message::SetupSkip => {
+                self.setup_prompt = false;
+                self.setup_error = None;
+            }
+            Message::SetupLaunch => {
+                if let Some(placed) = &self.setup_done {
+                    let _ = std::process::Command::new(placed).spawn();
+                }
+                return iced::exit();
+            }
             Message::ReleaseNotes => {
                 let tag = match &self.app_update {
                     Some(release) => release.tag.clone(),
@@ -2371,6 +2439,15 @@ mod tests {
             notes: String::new(),
             assets: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_build_from_the_cargo_tree_never_asks_to_install() {
+        let Some(app) = app() else { return };
+        assert!(
+            !app.setup_prompt,
+            "the test binary is a build, not an install"
+        );
     }
 
     #[test]
