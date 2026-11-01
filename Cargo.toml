@@ -15,6 +15,7 @@ esf-dogma-engine = "13.7"
 esf-format = "13.7"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 serde_json = "1"
+winresource = "0.1"
 ring = "0.17"
 iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "x11", "wayland", "thread-pool", "canvas", "crisp", "web-colors", "svg", "image"] }
 

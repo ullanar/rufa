@@ -14,3 +14,6 @@ iced.workspace = true
 rufa-data.workspace = true
 rufa-sim.workspace = true
 rufa-store.workspace = true
+
+[build-dependencies]
+winresource.workspace = true
