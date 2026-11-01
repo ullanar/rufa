@@ -14,7 +14,7 @@ Download a build from [Releases](https://github.com/ullanar/rufa/releases) and s
 - Windows: `rufa-*-x86_64-pc-windows-msvc.exe`.
 - macOS: `rufa-*-aarch64-apple-darwin` on Apple silicon, `rufa-*-x86_64-apple-darwin` on Intel.
 
-Every target also ships as a `.zip`. On Linux and macOS mark the file executable once:
+Every target also ships as an archive next to the bare file: `.zip` on Windows, `.tar.gz` on Linux and macOS. On Linux and macOS mark the file executable once:
 
 ```
 chmod +x rufa-*
