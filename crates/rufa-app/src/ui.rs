@@ -207,6 +207,35 @@ pub fn bar<'a>(fraction: f32, fill: Color, height: f32) -> El<'a> {
         .into()
 }
 
+pub fn split_bar<'a>(parts: [f64; 4], colors: [Color; 4], height: f32) -> El<'a> {
+    let total: f64 = parts.iter().fold(0.0, |sum, part| sum + part);
+    if total <= 0.0 {
+        return container(space().width(Length::Fill).height(height))
+            .style(theme::rounded(theme::TRACK, 2.0))
+            .width(Length::Fill)
+            .height(height)
+            .into();
+    }
+    let mut line = row![];
+    for (part, color) in parts.into_iter().zip(colors) {
+        let share = ((part / total) * 1000.0).round() as u16;
+        if share == 0 {
+            continue;
+        }
+        line = line.push(
+            container(space().width(Length::Fill).height(height))
+                .style(theme::fill(color))
+                .width(Length::FillPortion(share))
+                .height(height),
+        );
+    }
+    container(line)
+        .style(theme::rounded(theme::TRACK, 2.0))
+        .width(Length::Fill)
+        .height(height)
+        .into()
+}
+
 pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
     let fraction = if total > 0.0 {
         (used / total) as f32

@@ -2014,6 +2014,64 @@ mod tests {
     }
 
     #[test]
+    fn a_logistics_fit_reports_what_it_hands_out() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Guardian, logi]\n\nLarge Remote Armor Repairer II\nLarge Remote Armor Repairer II\nLarge Remote Capacitor Transmitter II\n\nMedium Armor Maintenance Bot II x5\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        assert_eq!(app.docs.len(), 1, "{}", app.status);
+        let s = &app.docs[0].doc.stats;
+        assert!((s.remote.armor - 198.666).abs() < 0.01, "{:?}", s.remote);
+        assert!((s.remote.capacitor - 70.2).abs() < 0.01, "{:?}", s.remote);
+        assert_eq!(s.remote.shield, 0.0);
+        assert!(s.remote.range > 50_000.0, "{:?}", s.remote);
+        assert!(s.remote.drain > 0.0);
+        assert!(!s.remote.spools());
+        let _ = app.view();
+    }
+
+    #[test]
+    fn a_cap_hungry_repairer_reports_a_sustained_rate() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Vexor, tank]\nMedium Armor Repairer II\nDamage Control II\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        let d = &app.docs[0].doc.stats.defense;
+        assert!(d.armor_repair_rate > 40.0, "{}", d.armor_repair_rate);
+        assert!(d.sustained.capped);
+        assert!(
+            d.sustained.armor < d.armor_repair_rate && d.sustained.armor > 0.0,
+            "{:?}",
+            d.sustained
+        );
+        let _ = app.view();
+    }
+
+    #[test]
+    fn a_miner_reports_ore_per_second_and_damage_splits_by_type() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Venture, mining]\n\nMiner II\nMiner II\n\nMining Drone II x2\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        let s = &app.docs[0].doc.stats;
+        assert!(s.mining.miner > 0.0 && s.mining.drone > 0.0, "{:?}", s.mining);
+        assert!((s.mining.per_hour() - s.mining.total() * 3600.0).abs() < 1e-6);
+        assert!(s.resources.holds.iter().any(|size| *size > 0.0), "ore hold");
+
+        let rifter = type_id(&app, "Rifter");
+        let ac = type_id(&app, "200mm AutoCannon II");
+        let emp = type_id(&app, "EMP S");
+        let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::AddItem(ac));
+        let _ = app.update(Message::AddItem(emp));
+        let o = &app.docs[1].doc.stats.offense;
+        let split: f64 = o.damage.iter().sum();
+        assert!((split - o.dps).abs() < 0.01, "{:?} vs {}", o.damage, o.dps);
+        assert!(o.damage[0] > o.damage[2], "EMP is mostly EM: {:?}", o.damage);
+        let t = &app.docs[1].doc.stats.targeting;
+        assert!(t.lock_times[2] > 0.0 && t.lock_times[6] < t.lock_times[2]);
+        assert!(app.docs[1].doc.stats.navigation.max_warp_distance > 0.0);
+        let _ = app.view();
+    }
+
+    #[test]
     fn drones_arrive_as_a_pack_and_stay_within_the_limits() {
         let Some(mut app) = app() else { return };
         let vexor = type_id(&app, "Vexor");
