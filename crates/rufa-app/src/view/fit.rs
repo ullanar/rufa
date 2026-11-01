@@ -343,14 +343,21 @@ fn name_budget(width: f32, fixed: f32) -> usize {
 fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     let compact = width < 700.0;
     let fit = &doc.doc.fit;
-    let loaded = fit
+    // The charge column takes what the longest loaded charge needs and no more,
+    // so a short name like EMP S leaves the rest to the module names.
+    let longest_charge = fit
         .items
         .iter()
-        .any(|item| item.charge.is_some() && Rack::of_slot(item.slot).is_some());
-    let charge_width = match (loaded, compact) {
-        (false, _) => 0.0,
-        (true, true) => 90.0,
-        (true, false) => 140.0,
+        .filter(|item| Rack::of_slot(item.slot).is_some())
+        .filter_map(|item| item.charge.as_ref())
+        .map(|c| app.type_name(c.type_id).chars().count())
+        .max()
+        .unwrap_or(0);
+    let charge_width = if longest_charge == 0 {
+        0.0
+    } else {
+        let wanted = longest_charge as f32 * CHAR + 20.0;
+        wanted.clamp(40.0, if compact { 90.0 } else { 140.0 })
     };
     let info_width = if compact { 0.0 } else { 200.0 };
     let module_names = name_budget(width, 117.0 + charge_width + info_width);
@@ -1062,12 +1069,19 @@ fn item_row<'a>(
                 .on_press(Message::Quantity(i, item.quantity + 1)),
         );
     }
-    line = line.push(
+    // The remove button shows under the cursor. Its space stays reserved, so a
+    // row never shifts as the pointer passes over it.
+    let hovered = app.hovered_item == Some(i) || selected;
+    let remove: El<'a> = if hovered {
         button(text("×").size(ui::SMALL))
             .padding([1, 5])
             .style(theme::ghost)
-            .on_press(Message::RemoveItem(i)),
-    );
+            .on_press(Message::RemoveItem(i))
+            .into()
+    } else {
+        space().width(19).into()
+    };
+    line = line.push(remove);
 
     mouse_area(
         container(line)
