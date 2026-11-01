@@ -92,6 +92,15 @@ jobs:
             cp "target/$TARGET/release/rufa" "dist/out/$name"
           fi
           cp LICENSE README.md "dist/$name/"
+          sum() {
+            if command -v sha256sum > /dev/null; then
+              sha256sum "$@"
+            else
+              shasum -a 256 "$@"
+            fi
+          }
+          (cd "dist/$name" && sum -- * > ../SHA256SUMS)
+          mv dist/SHA256SUMS "dist/$name/SHA256SUMS"
           cd dist
           if [ "$ARCHIVE" = "zip" ]; then
             7z a "out/$name.zip" "$name" > /dev/null
@@ -115,6 +124,10 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: checksums over every asset
+        run: |
+          (cd dist && sha256sum rufa-*) > "rufa-$TAG-checksums.sha256"
+          mv "rufa-$TAG-checksums.sha256" dist/
       - name: upload assets and publish
         env:
           GH_TOKEN: ${{ github.token }}
