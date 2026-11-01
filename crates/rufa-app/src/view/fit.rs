@@ -1,7 +1,8 @@
 use iced::widget::{
-    button, column, container, mouse_area, pick_list, row, scrollable, space, text,
+    button, column, container, image, mouse_area, pick_list, row, scrollable, space, text,
 };
 use iced::{Color, Length};
+use rufa_data::icons::Kind;
 use rufa_sim::place::Rack;
 use rufa_sim::projection::Projected;
 use rufa_sim::{Slot, State};
@@ -70,6 +71,70 @@ pub fn view(app: &App) -> El<'_> {
         .into()
 }
 
+fn hull_card<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
+    let fit = &doc.doc.fit;
+    let group = app
+        .game
+        .as_ref()
+        .ok()
+        .and_then(|g| {
+            g.sde
+                .get_type(fit.ship.type_id)
+                .map(|t| g.catalog.group_name(t.group_id()).to_string())
+        })
+        .unwrap_or_default();
+    let picture: El<'a> = match app.icon(Kind::Render, fit.ship.type_id) {
+        Some(handle) => image(handle).width(64).height(64).into(),
+        None => container(space().width(64).height(64))
+            .style(theme::rounded(theme::SUNKEN, 6.0))
+            .into(),
+    };
+    let r = &doc.doc.stats.resources;
+    let mini = |name: &'static str, used: f64, total: f64| {
+        let fraction = if total > 0.0 {
+            (used / total) as f32
+        } else {
+            0.0
+        };
+        column![
+            row![
+                ui::label(name).width(Length::Fill),
+                text(format!("{:.0}%", fraction * 100.0))
+                    .size(ui::MICRO)
+                    .font(theme::UI_MEDIUM)
+                    .color(if fraction > 1.0 {
+                        theme::DANGER_TEXT
+                    } else {
+                        theme::TEXT_SECONDARY
+                    })
+            ],
+            ui::bar(fraction, ui::gauge_color(fraction), 3.0),
+        ]
+        .spacing(2)
+        .width(90)
+    };
+    container(
+        row![
+            picture,
+            column![ui::title(app.type_name(fit.ship.type_id)), ui::muted(group),]
+                .spacing(2)
+                .width(Length::Fill),
+            row![
+                mini("CPU", r.cpu_used, r.cpu_total),
+                mini("PG", r.power_used, r.power_total),
+                mini("CAL", r.calibration_used, r.calibration_total),
+            ]
+            .spacing(ui::PAD),
+        ]
+        .spacing(ui::PAD)
+        .align_y(iced::Alignment::Center),
+    )
+    .padding(ui::PAD)
+    .width(Length::Fill)
+    .style(theme::card)
+    .into()
+}
+
 fn rail_color(rack: Rack) -> Color {
     match rack {
         Rack::High => theme::RAIL_HIGH,
@@ -133,6 +198,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         bottom: 0.0,
         left: 0.0,
     });
+    col = col.push(hull_card(app, doc));
 
     if let Ok(game) = &app.game
         && let Some(ty) = game.sde.get_type(fit.ship.type_id)
@@ -437,9 +503,14 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color) -> El<'a> {
         .on_right_press(Message::ToggleOverload(i))
         .on_middle_press(Message::ToggleOffline(i));
 
+    let icon: El<'a> = match app.icon(Kind::Icon, item.type_id) {
+        Some(handle) => image(handle).width(18).height(18).into(),
+        None => space().width(18).height(18).into(),
+    };
     let mut line = row![
         container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
         glyph,
+        icon,
         text(ui::clip(&name, 40))
             .size(ui::BODY)
             .font(theme::UI_MEDIUM)
