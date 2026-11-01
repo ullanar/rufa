@@ -38,6 +38,11 @@ fn main() -> iced::Result {
         .window(iced::window::Settings {
             size: iced::Size::new(1440.0, 900.0),
             min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
+            icon: iced::window::icon::from_file_data(
+                include_bytes!("../assets/icons/rufa-256.png"),
+                None,
+            )
+            .ok(),
             ..Default::default()
         })
         .default_font(theme::UI)
