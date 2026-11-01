@@ -26,6 +26,10 @@ cargo run --release -- my-fit.eft
 
 Fits are esf/1 text files under `$XDG_CONFIG_HOME/rufa/fits`. Game data lives in `$XDG_DATA_HOME/rufa`.
 
+## Contributing
+
+Open a pull request against `master`. Every commit message follows [Conventional Commits](https://www.conventionalcommits.org/); the branch ruleset and CI reject anything else, and release-please turns the messages into the changelog.
+
 ## License
 
 MIT. Game data belongs to Fendris Creations and ships under their license with [sde-patched](https://github.com/EVEShipFit/sde-patched).
