@@ -1,6 +1,7 @@
 use iced::widget::responsive;
 use iced::widget::{
-    button, column, container, image, mouse_area, pick_list, pin, row, space, stack, text, tooltip,
+    button, column, container, image, mouse_area, pick_list, pin, row, space, stack, text,
+    text_input, tooltip,
 };
 use iced::{Color, Length};
 use rufa_data::icons::Kind;
@@ -1013,11 +1014,25 @@ fn item_row<'a>(
     .align_y(iced::Alignment::Center);
 
     if item.slot == Slot::DroneBay || item.slot == Slot::Cargo {
+        let shown = match &app.quantity_edit {
+            Some((at, text)) if *at == i => text.clone(),
+            _ => item.quantity.to_string(),
+        };
         line = line.push(
             button(text("−").size(ui::SMALL))
                 .padding([1, 5])
                 .style(theme::ghost)
                 .on_press(Message::Quantity(i, item.quantity.saturating_sub(1))),
+        );
+        line = line.push(
+            text_input("", &shown)
+                .on_input(move |s| Message::QuantityInput(i, s))
+                .on_submit(Message::QuantityDone)
+                .size(ui::SMALL)
+                .padding(ui::field(1.0, 4.0))
+                .width(48)
+                .align_x(iced::alignment::Horizontal::Right)
+                .style(theme::input),
         );
         line = line.push(
             button(text("+").size(ui::SMALL))

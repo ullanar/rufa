@@ -214,6 +214,8 @@ pub enum Message {
     DamageProfile(DamagePreset),
     AddTo(AddTo),
     MoveToCargo(usize),
+    QuantityInput(usize, String),
+    QuantityDone,
     ProjectItem(i32),
     ProjectFit(usize),
     Environment(EnvChoice),
@@ -341,6 +343,7 @@ pub struct App {
     pub current: CharChoice,
     pub skill_search: String,
     pub add_to: AddTo,
+    pub quantity_edit: Option<(usize, String)>,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -429,6 +432,7 @@ impl App {
             current,
             skill_search: String::new(),
             add_to: AddTo::Fit,
+            quantity_edit: None,
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -918,6 +922,16 @@ impl App {
                 Ok(())
             }),
             Message::AddTo(target) => self.add_to = target,
+            Message::QuantityInput(i, text) => {
+                let digits: String = text.chars().filter(char::is_ascii_digit).take(6).collect();
+                if let Ok(n) = digits.parse::<u32>()
+                    && n > 0
+                {
+                    self.edit_active(|fit, _| edit::set_quantity(fit, i, n));
+                }
+                self.quantity_edit = Some((i, digits));
+            }
+            Message::QuantityDone => self.quantity_edit = None,
             Message::MoveToCargo(i) => {
                 self.edit_active(|fit, _| edit::move_to_cargo(fit, i));
                 self.selected_item = None;
@@ -2595,6 +2609,42 @@ mod tests {
             Some(2),
             "the stowed one stacked"
         );
+        let _ = app.view();
+    }
+
+    #[test]
+    fn a_cargo_count_is_typed_not_clicked() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let emp = type_id(&app, "EMP S");
+        let _ = app.update(Message::NewFit(rifter));
+        let _ = app.update(Message::AddTo(AddTo::Cargo));
+        let _ = app.update(Message::AddItem(emp));
+        let at = app.docs[0]
+            .doc
+            .fit
+            .items
+            .iter()
+            .position(|it| it.slot == rufa_sim::Slot::Cargo)
+            .unwrap();
+
+        for text in ["5", "50", "500", "5000"] {
+            let _ = app.update(Message::QuantityInput(at, text.to_string()));
+        }
+        assert_eq!(app.docs[0].doc.fit.items[at].quantity, 5000);
+
+        let _ = app.update(Message::QuantityInput(at, "12x3".to_string()));
+        assert_eq!(app.docs[0].doc.fit.items[at].quantity, 123, "digits only");
+
+        let _ = app.update(Message::QuantityInput(at, String::new()));
+        assert_eq!(
+            app.docs[0].doc.fit.items[at].quantity, 123,
+            "an empty field leaves the count alone"
+        );
+        assert_eq!(app.quantity_edit, Some((at, String::new())));
+
+        let _ = app.update(Message::QuantityDone);
+        assert_eq!(app.quantity_edit, None);
         let _ = app.view();
     }
 
