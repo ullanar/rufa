@@ -19,14 +19,6 @@ pub fn view(app: &App) -> El<'_> {
 
 fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     let s = &doc.doc.stats;
-    let r = &s.resources;
-    let worst = [
-        r.cpu_used / r.cpu_total.max(1e-9),
-        r.power_used / r.power_total.max(1e-9),
-        r.calibration_used / r.calibration_total.max(1e-9),
-    ]
-    .into_iter()
-    .fold(0.0f64, f64::max);
     let cap = &s.capacitor;
     let cap_head = if cap.stable_pct > 0.0 {
         format!("{:.0}%", cap.stable_pct)
@@ -34,12 +26,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         fmt::seconds(cap.depletes_in)
     };
     let mut col = column![
-        ui::section_colored(
-            "Resources",
-            Some(format!("{:.0}%", worst * 100.0)),
-            ui::gauge_text_color(worst as f32),
-            resources(s, narrow)
-        ),
+        ui::section("Resources", None, resources(s, narrow)),
         ui::section(
             "Defense",
             Some(fmt::num(s.defense.ehp, 0)),
@@ -72,11 +59,13 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     ]
     .spacing(ui::SECTION_GAP);
     if let Some(item) = app.selected_item.filter(|i| *i < doc.doc.fit.items.len()) {
-        col = col.push(ui::section(
-            "Selected item",
-            None,
-            item_attributes(app, doc, item),
-        ));
+        let count = app.selected.len();
+        let (name, headline) = if count > 1 {
+            ("Selection", Some(format!("{count} items")))
+        } else {
+            ("Selected item", None)
+        };
+        col = col.push(ui::section(name, headline, item_attributes(app, doc, item)));
     }
     ui::scroll(container(col).padding(iced::Padding {
         top: 0.0,
@@ -550,15 +539,21 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
         let color = if modified { theme::ACCENT } else { theme::TEXT };
         col = col.push(
             row![
-                text(label)
-                    .size(ui::SMALL)
-                    .color(theme::TEXT_SECONDARY)
-                    .width(Length::Fill),
+                container(
+                    text(label)
+                        .size(ui::SMALL)
+                        .color(theme::TEXT_SECONDARY)
+                        .wrapping(text::Wrapping::None)
+                )
+                .clip(true)
+                .width(Length::Fill),
                 text(value)
                     .size(ui::SMALL)
                     .font(theme::UI_MEDIUM)
-                    .color(color),
+                    .color(color)
+                    .wrapping(text::Wrapping::None),
             ]
+            .spacing(ui::GAP)
             .align_y(iced::Alignment::Center),
         );
     }
@@ -726,18 +721,26 @@ fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: u
 }
 
 fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> {
+    responsive(move |size| compare_table(game, type_id, size.width)).into()
+}
+
+fn compare_table<'a>(game: &'static rufa_data::Game, type_id: i32, width: f32) -> El<'a> {
     let Some(ty) = game.sde.get_type(type_id) else {
         return column![].into();
     };
-    let variants: Vec<_> = game
-        .catalog
-        .variations(ty.market_group_id(), ty.group_id())
-        .iter()
-        .take(6)
-        .collect();
+    let label_width = (width * 0.42).clamp(60.0, 150.0);
+    let columns = (((width - label_width) / 46.0) as usize).clamp(1, 5);
+    let all = game.catalog.variations(ty.market_group_id(), ty.group_id());
+    if all.len() < 2 {
+        return column![].into();
+    }
+    let mut variants: Vec<&rufa_data::TypeRef> = all.iter().filter(|v| v.id == type_id).collect();
+    variants.extend(all.iter().filter(|v| v.id != type_id));
+    variants.truncate(columns);
     if variants.len() < 2 {
         return column![].into();
     }
+
     let info = game.info();
     let values: Vec<std::collections::BTreeMap<i32, f64>> = variants
         .iter()
@@ -745,7 +748,7 @@ fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> 
             info.get_dogma_attributes(v.id)
                 .into_iter()
                 .flatten()
-                .map(|a| (a.attribute_id(), a.value() as f64))
+                .map(|a| (a.attribute_id(), f64::from(a.value())))
                 .collect()
         })
         .collect();
@@ -767,21 +770,35 @@ fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> 
     if differing.is_empty() {
         return column![].into();
     }
-    let mut header = row![ui::label("COMPARE").width(Length::FillPortion(2))].spacing(2);
-    for v in &variants {
-        let short: String = v
-            .name
-            .split(' ')
-            .map(|w| w.chars().take(4).collect::<String>())
-            .collect::<Vec<_>>()
-            .join(" ");
-        header = header.push(
-            text(short)
+
+    let names = short_names(&variants);
+    let cell_width = ((width - label_width) / variants.len() as f32).max(28.0);
+    let cell = |shown: String, color: Color| {
+        container(
+            text(shown)
                 .size(ui::MICRO)
-                .color(theme::MUTED)
-                .width(Length::FillPortion(1)),
-        );
+                .color(color)
+                .wrapping(text::Wrapping::None)
+                .align_x(iced::alignment::Horizontal::Right)
+                .width(Length::Fill),
+        )
+        .clip(true)
+        .width(cell_width)
+    };
+    let mut header = row![
+        container(ui::label("COMPARE"))
+            .clip(true)
+            .width(label_width)
+    ];
+    for (n, name) in names.iter().enumerate() {
+        let color = if variants[n].id == type_id {
+            theme::ACCENT
+        } else {
+            theme::MUTED
+        };
+        header = header.push(cell(name.clone(), color));
     }
+
     let mut table = column![header].spacing(1);
     for id in differing {
         let label = game
@@ -790,12 +807,15 @@ fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> 
             .map(|l| l.display_name.clone())
             .unwrap_or_default();
         let mut line = row![
-            text(label)
-                .size(ui::MICRO)
-                .color(theme::TEXT_SECONDARY)
-                .width(Length::FillPortion(2))
-        ]
-        .spacing(2);
+            container(
+                text(label)
+                    .size(ui::MICRO)
+                    .color(theme::TEXT_SECONDARY)
+                    .wrapping(text::Wrapping::None)
+            )
+            .clip(true)
+            .width(label_width)
+        ];
         for (n, map) in values.iter().enumerate() {
             let shown = map
                 .get(&id)
@@ -806,14 +826,38 @@ fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> 
             } else {
                 theme::TEXT
             };
-            line = line.push(
-                text(shown)
-                    .size(ui::MICRO)
-                    .color(color)
-                    .width(Length::FillPortion(1)),
-            );
+            line = line.push(cell(shown, color));
         }
         table = table.push(line);
     }
     table.into()
+}
+
+fn short_names(variants: &[&rufa_data::TypeRef]) -> Vec<String> {
+    let words: Vec<Vec<&str>> = variants
+        .iter()
+        .map(|v| v.name.split_whitespace().collect())
+        .collect();
+    let shared: Vec<&str> = words[0]
+        .iter()
+        .copied()
+        .filter(|w| words.iter().all(|other| other.contains(w)))
+        .collect();
+    words
+        .iter()
+        .enumerate()
+        .map(|(n, parts)| {
+            let kept: Vec<&str> = parts
+                .iter()
+                .copied()
+                .filter(|w| !shared.contains(w))
+                .collect();
+            let name = if kept.is_empty() {
+                variants[n].name.clone()
+            } else {
+                kept.join(" ")
+            };
+            ui::clip(&name, 9)
+        })
+        .collect()
 }

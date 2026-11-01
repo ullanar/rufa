@@ -242,6 +242,26 @@ pub fn danger(_theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pip {
+    Launched,
+    Open,
+    Blocked,
+    Missing,
+}
+
+pub fn pip(state: Pip) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| match state {
+        Pip::Launched => flat(Some(ACTIVE), ACCENT_INK, Some(ACTIVE), 2.0),
+        Pip::Open => match status {
+            button::Status::Hovered => flat(Some(ACCENT_WASH), TEXT, Some(ACCENT_LINE), 2.0),
+            _ => flat(Some(SUNKEN), TEXT_SECONDARY, Some(EDGE), 2.0),
+        },
+        Pip::Blocked => flat(Some(DANGER_FILL), DANGER_TEXT, Some(DANGER_LINE), 2.0),
+        Pip::Missing => flat(None, DISABLED, Some(HAIRLINE), 2.0),
+    }
+}
+
 pub fn chip(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
         if selected {
@@ -256,15 +276,23 @@ pub fn chip(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style 
 }
 
 pub fn tab(active: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
-    move |_, status| {
-        if active {
-            flat(Some(BASE), TEXT, None, 4.0)
-        } else {
-            match status {
-                button::Status::Hovered => flat(Some(RAISED), TEXT, None, 4.0),
-                _ => flat(None, MUTED, None, 4.0),
-            }
-        }
+    move |_, _| flat(None, if active { TEXT } else { MUTED }, None, 4.0)
+}
+
+pub fn tab_shell(active: bool, hovered: bool) -> impl Fn(&Theme) -> container::Style {
+    move |_| container::Style {
+        background: match (active, hovered) {
+            (true, _) => Some(Background::Color(BASE)),
+            (false, true) => Some(Background::Color(RAISED)),
+            (false, false) => None,
+        },
+        border: Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: Radius::new(4.0),
+        },
+        snap: true,
+        ..container::Style::default()
     }
 }
 

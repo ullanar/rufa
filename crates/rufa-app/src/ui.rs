@@ -92,6 +92,17 @@ pub fn scroll<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Mess
         .style(theme::scroll)
 }
 
+pub fn scroll_x<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Message> {
+    scrollable(content)
+        .direction(scrollable::Direction::Horizontal(
+            scrollable::Scrollbar::new()
+                .width(5)
+                .scroller_width(5)
+                .spacing(3),
+        ))
+        .style(theme::scroll)
+}
+
 pub fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
@@ -211,9 +222,20 @@ pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'sta
         crate::fmt::num(used, 1),
         crate::fmt::num(total, 1)
     );
+    let percent = text(format!("{}%", crate::fmt::num(f64::from(fraction) * 100.0, 0)))
+        .font(theme::UI_MEDIUM)
+        .size(MICRO)
+        .color(text_color)
+        .wrapping(text::Wrapping::None);
+    let named = container(
+        row![small(name), percent]
+            .spacing(GAP)
+            .align_y(iced::Alignment::Center),
+    )
+    .clip(true);
     let head: El<'a> = if narrow {
         column![
-            small(name),
+            named.width(Length::Fill),
             container(value_colored(shown, text_color))
                 .clip(true)
                 .width(Length::Fill)
@@ -222,9 +244,13 @@ pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'sta
         .spacing(1)
         .into()
     } else {
-        row![name_cell(name), value_colored(shown, text_color)]
-            .align_y(iced::Alignment::Center)
-            .into()
+        row![
+            named.width(Length::Fill),
+            value_colored(shown, text_color)
+        ]
+        .spacing(GAP)
+        .align_y(iced::Alignment::Center)
+        .into()
     };
     column![head, bar(fraction, color, 4.0)].spacing(2).into()
 }
