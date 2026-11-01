@@ -4,7 +4,7 @@ use rufa_data::catalog::MARKET_ROOTS;
 
 use crate::theme;
 use crate::ui::{self, El};
-use crate::{App, CharChoice, LeftTab, Message};
+use crate::{AddTo, App, CharChoice, LeftTab, Message};
 
 pub fn view(app: &App) -> El<'_> {
     let tab = |label: &'static str, which: LeftTab| {
@@ -357,19 +357,21 @@ fn market(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
         return ui::muted("No game data loaded").into();
     };
-    let mode = |label: &'static str, on: bool| {
+    let mode = |label: &'static str, target: AddTo| {
         button(text(label).size(ui::MICRO))
             .padding(ui::pill_tight(7.0))
-            .style(theme::chip(app.project_mode == on))
-            .on_press(Message::ProjectMode(on))
+            .style(theme::chip(app.add_to == target))
+            .on_press(Message::AddTo(target))
     };
     let modes = row![
         ui::label("CLICK ADDS TO"),
-        mode("fit", false),
-        mode("projected", true)
+        mode("fit", AddTo::Fit),
+        mode("cargo", AddTo::Cargo),
+        mode("projected", AddTo::Projected),
     ]
     .spacing(ui::GAP)
-    .align_y(iced::Alignment::Center);
+    .align_y(iced::Alignment::Center)
+    .wrap();
     let mut list = column![].spacing(1);
 
     if app.market_search.trim().len() >= 2 {

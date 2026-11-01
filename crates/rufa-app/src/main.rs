@@ -212,7 +212,8 @@ pub enum Message {
     DroneCarried(i32, u32),
     LoadCharge(usize, Option<i32>),
     DamageProfile(DamagePreset),
-    ProjectMode(bool),
+    AddTo(AddTo),
+    MoveToCargo(usize),
     ProjectItem(i32),
     ProjectFit(usize),
     Environment(EnvChoice),
@@ -290,6 +291,14 @@ pub struct Price {
     pub head: f64,
 }
 
+/// Where a click in the market browser puts the type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddTo {
+    Fit,
+    Projected,
+    Cargo,
+}
+
 pub struct Doc {
     pub doc: Document,
     pub path: Option<PathBuf>,
@@ -331,7 +340,7 @@ pub struct App {
     pub characters: Vec<Character>,
     pub current: CharChoice,
     pub skill_search: String,
-    pub project_mode: bool,
+    pub add_to: AddTo,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -419,7 +428,7 @@ impl App {
             characters,
             current,
             skill_search: String::new(),
-            project_mode: false,
+            add_to: AddTo::Fit,
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -856,8 +865,19 @@ impl App {
                 self.market_search = s;
             }
             Message::MarketGroup(g) => self.market_group = g,
-            Message::AddItem(type_id) if self.project_mode => {
+            Message::AddItem(type_id) if self.add_to == AddTo::Projected => {
                 return self.update(Message::ProjectItem(type_id));
+            }
+            Message::AddItem(type_id) if self.add_to == AddTo::Cargo => {
+                if self.docs.is_empty() {
+                    self.status = "Open a fit first: pick a hull on the Ships tab".to_string();
+                    return Task::none();
+                }
+                self.edit_active(|fit, _| {
+                    edit::add_to_cargo(fit, type_id);
+                    Ok(())
+                });
+                return Task::batch([self.fetch_prices(), self.fetch_icons()]);
             }
             Message::AddItem(type_id) => {
                 if self.docs.is_empty() {
@@ -897,7 +917,12 @@ impl App {
                 fit.environment.damage_profile = preset.profile();
                 Ok(())
             }),
-            Message::ProjectMode(on) => self.project_mode = on,
+            Message::AddTo(target) => self.add_to = target,
+            Message::MoveToCargo(i) => {
+                self.edit_active(|fit, _| edit::move_to_cargo(fit, i));
+                self.selected_item = None;
+                self.menu = None;
+            }
             Message::ProjectItem(type_id) => {
                 let source = Projected::Module {
                     type_id,
@@ -2518,6 +2543,62 @@ mod tests {
     }
 
     #[test]
+    fn anything_can_ride_in_the_cargo_hold() {
+        let Some(mut app) = app() else { return };
+        let rifter = type_id(&app, "Rifter");
+        let booster = type_id(&app, "Standard Blue Pill Booster");
+        let implant = type_id(&app, "Ocular Filter - Basic");
+        let _ = app.update(Message::NewFit(rifter));
+
+        let _ = app.update(Message::AddTo(AddTo::Cargo));
+        let _ = app.update(Message::AddItem(booster));
+        let _ = app.update(Message::AddItem(booster));
+        let _ = app.update(Message::AddItem(implant));
+        let fit = &app.docs[0].doc.fit;
+        let stowed: Vec<_> = fit
+            .items
+            .iter()
+            .filter(|it| it.slot == rufa_sim::Slot::Cargo)
+            .map(|it| (it.type_id, it.quantity))
+            .collect();
+        assert_eq!(stowed, vec![(booster, 2), (implant, 1)], "{stowed:?}");
+        assert!(
+            fit.items.iter().all(|it| !matches!(
+                it.slot,
+                rufa_sim::Slot::Booster(_) | rufa_sim::Slot::Implant(_)
+            )),
+            "nothing is worn"
+        );
+
+        let _ = app.update(Message::AddTo(AddTo::Fit));
+        let _ = app.update(Message::AddItem(implant));
+        let worn = app.docs[0]
+            .doc
+            .fit
+            .items
+            .iter()
+            .position(|it| matches!(it.slot, rufa_sim::Slot::Implant(_)))
+            .expect("the implant goes in the head");
+        let _ = app.update(Message::MoveToCargo(worn));
+        let fit = &app.docs[0].doc.fit;
+        assert!(
+            fit.items
+                .iter()
+                .all(|it| !matches!(it.slot, rufa_sim::Slot::Implant(_))),
+            "the head is empty again"
+        );
+        assert_eq!(
+            fit.items
+                .iter()
+                .find(|it| it.slot == rufa_sim::Slot::Cargo && it.type_id == implant)
+                .map(|it| it.quantity),
+            Some(2),
+            "the stowed one stacked"
+        );
+        let _ = app.view();
+    }
+
+    #[test]
     fn market_search_finds_modules() {
         let Some(mut app) = app() else { return };
         let _ = app.update(Message::MarketSearch("damage control".to_string()));
@@ -2574,7 +2655,7 @@ mod tests {
         let _ = app.update(Message::NewFit(rifter));
         let speed = app.docs[0].doc.stats.navigation.max_velocity;
 
-        let _ = app.update(Message::ProjectMode(true));
+        let _ = app.update(Message::AddTo(AddTo::Projected));
         let _ = app.update(Message::AddItem(web));
         assert_eq!(
             app.docs[0].doc.fit.items.len(),
@@ -2586,7 +2667,7 @@ mod tests {
         assert!(webbed < speed * 0.6, "webbed {webbed} vs {speed}");
         let _ = app.update(Message::RemoveProjection(0));
         assert!((app.docs[0].doc.stats.navigation.max_velocity - speed).abs() < 1e-6);
-        let _ = app.update(Message::ProjectMode(false));
+        let _ = app.update(Message::AddTo(AddTo::Fit));
 
         let env = app
             .game
