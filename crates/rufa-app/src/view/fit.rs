@@ -311,8 +311,8 @@ fn rack_header<'a>(name: String, used: usize, count: u8, over: bool) -> El<'a> {
     .into()
 }
 
-fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
-    container(
+fn empty_row<'a>(label: String, rail: Color, rack: Option<Rack>) -> El<'a> {
+    let line = container(
         row![
             container(space().width(3).height(Length::Fill)).style(theme::rounded(rail, 1.0)),
             text(label).size(ui::SMALL).color(theme::FAINT),
@@ -322,8 +322,14 @@ fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
     )
     .height(ui::ROW)
     .padding([0, 4])
-    .width(Length::Fill)
-    .into()
+    .width(Length::Fill);
+    // An empty slot is the shortest way to ask for a module that fits it.
+    match rack {
+        Some(rack) => mouse_area(line)
+            .on_press(Message::PickForRack(Some(rack)))
+            .into(),
+        None => line.into(),
+    }
 }
 
 type SlotFilter = fn(Slot) -> bool;
@@ -416,6 +422,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                     col = col.push(empty_row(
                         format!("{} slot", rack.label()),
                         rail_color(rack),
+                        Some(rack),
                     ))
                 }
             }
@@ -489,7 +496,11 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> O
     }
     let mut col = column![drone_header(load, compact)].spacing(1);
     if types.is_empty() {
-        col = col.push(empty_row("Drone bay".to_string(), theme::RAIL_SERVICE));
+        col = col.push(empty_row(
+            "Drone bay".to_string(),
+            theme::RAIL_SERVICE,
+            None,
+        ));
     }
     for type_id in types {
         let room = drones::room(&game.info(), &ids, &doc.doc.calc, type_id);
