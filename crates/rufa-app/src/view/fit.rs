@@ -306,7 +306,7 @@ fn rack_header<'a>(name: String, used: usize, count: u8, over: bool) -> El<'a> {
 fn empty_row<'a>(label: String, rail: Color) -> El<'a> {
     container(
         row![
-            container(space().width(3).height(14)).style(theme::rounded(rail, 1.5)),
+            container(space().width(3).height(Length::Fill)).style(theme::rounded(rail, 1.0)),
             text(label).size(ui::SMALL).color(theme::FAINT),
         ]
         .spacing(ui::GAP_ROW)
@@ -328,10 +328,18 @@ fn name_budget(width: f32, fixed: f32) -> usize {
 
 fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     let compact = width < 700.0;
-    let charge_width = if compact { 90.0 } else { 140.0 };
+    let fit = &doc.doc.fit;
+    let loaded = fit
+        .items
+        .iter()
+        .any(|item| item.charge.is_some() && Rack::of_slot(item.slot).is_some());
+    let charge_width = match (loaded, compact) {
+        (false, _) => 0.0,
+        (true, true) => 90.0,
+        (true, false) => 140.0,
+    };
     let info_width = if compact { 0.0 } else { 200.0 };
     let module_names = name_budget(width, 117.0 + charge_width + info_width);
-    let fit = &doc.doc.fit;
     let layout = &doc.doc.layout;
     let mut col = column![].spacing(1).padding(iced::Padding {
         top: 0.0,
@@ -393,6 +401,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                         rail_color(rack),
                         compact,
                         module_names,
+                        charge_width,
                     ))
                 }
                 None => {
@@ -445,7 +454,15 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
             left: 2.0,
         }));
         for i in indexes {
-            col = col.push(item_row(app, doc, i, rail, compact, module_names));
+            col = col.push(item_row(
+                app,
+                doc,
+                i,
+                rail,
+                compact,
+                module_names,
+                charge_width,
+            ));
         }
     }
 
@@ -597,7 +614,7 @@ fn drone_row<'a>(
         .unwrap_or_default();
 
     let mut line = row![
-        container(space().width(3).height(14)).style(theme::rounded(rail, 1.5)),
+        container(space().width(3).height(Length::Fill)).style(theme::rounded(rail, 1.0)),
         icon,
         container(
             text(ui::clip(app.type_name(type_id), names))
@@ -907,6 +924,7 @@ fn item_row<'a>(
     rail: Color,
     compact: bool,
     names: usize,
+    charge_width: f32,
 ) -> El<'a> {
     let item = &doc.doc.fit.items[i];
     let result = doc.doc.calc.items.get(i);
@@ -950,7 +968,7 @@ fn item_row<'a>(
         None => space().width(18).height(18).into(),
     };
     let mut line = row![
-        container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
+        container(space().width(3).height(Length::Fill)).style(theme::rounded(rail_shown, 1.0)),
         glyph,
         icon,
         container(
@@ -962,7 +980,7 @@ fn item_row<'a>(
         )
         .clip(true)
         .width(Length::Fill),
-        charge_cell(i, charge, if compact { 90.0 } else { 140.0 }),
+        charge_cell(i, charge, charge_width),
         info_cell(
             if compact {
                 Vec::new()
