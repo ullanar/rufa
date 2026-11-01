@@ -67,17 +67,17 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         ui::section(
             "Navigation",
             Some(format!("{} m/s", fmt::num(s.navigation.max_velocity, 0))),
-            navigation(s, narrow)
+            navigation(s, narrow),
         ),
         ui::section(
             "Targeting",
             Some(fmt::distance(s.targeting.max_range)),
-            targeting(s, narrow)
+            targeting(s, narrow),
         ),
         ui::section(
             "Price",
             app.fit_price(doc).map(|v| format!("{} ISK", fmt::short(v))),
-            price(app, doc, narrow)
+            price(app, doc, narrow),
         ),
     ]);
     if let Some(item) = app.selected_item.filter(|i| *i < doc.doc.fit.items.len()) {
@@ -139,7 +139,13 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
         "Hardpoints free",
         format!("{} turret, {} launcher", r.turrets_free, r.launchers_free),
     ));
-    col = col.push(ui::gauge(narrow, "Cargo", r.cargo_used, r.cargo_total, "m3"));
+    col = col.push(ui::gauge(
+        narrow,
+        "Cargo",
+        r.cargo_used,
+        r.cargo_total,
+        "m3",
+    ));
     if r.fighter_bay_total > 0.0 {
         col = col.push(ui::gauge(
             narrow,
@@ -238,12 +244,18 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
                 .on_press(Message::DamageProfile(preset)),
         );
     }
+    let head = |name: &'static str, color: Color| {
+        ui::label(name)
+            .color(color)
+            .width(Length::Fill)
+            .align_x(iced::alignment::Horizontal::Center)
+    };
     let header = row![
         space().width(72),
-        ui::label("EM").width(Length::Fill),
-        ui::label("TH").width(Length::Fill),
-        ui::label("KIN").width(Length::Fill),
-        ui::label("EXP").width(Length::Fill),
+        head("EM", theme::EM),
+        head("TH", theme::THERMAL),
+        head("KI", theme::KINETIC),
+        head("EX", theme::EXPLOSIVE),
         ui::label("EHP")
             .width(48)
             .align_x(iced::alignment::Horizontal::Right),
@@ -301,6 +313,22 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
         ),
     ]
     .spacing(3);
+    let incoming = [
+        ("Incoming shield", s.incoming.shield),
+        ("Incoming armor", s.incoming.armor),
+        ("Incoming hull", s.incoming.hull),
+    ];
+    for (name, value) in incoming {
+        if value <= 0.0 {
+            continue;
+        }
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            name,
+            format!("{} HP/s", fmt::num(value, 1)),
+            theme::SUCCESS_TEXT,
+        ));
+    }
     if d.sustained.capped {
         let sustained = [
             ("Shield sustained", d.sustained.shield, d.shield_boost_rate),
@@ -319,6 +347,30 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
             ));
         }
     }
+    if d.bombs.iter().any(|count| *count > 0.0) {
+        let mut line = row![].spacing(ui::GAP_ROW);
+        let names = ["Electron", "Scorch", "Concussion", "Shrapnel"];
+        for ((name, count), color) in names.iter().zip(d.bombs).zip([
+            theme::EM,
+            theme::THERMAL,
+            theme::KINETIC,
+            theme::EXPLOSIVE,
+        ]) {
+            line = line.push(
+                row![
+                    container(space().width(6).height(6)).style(theme::rounded(color, 1.0)),
+                    text(format!("{name} {}", fmt::num(count, 1)))
+                        .size(ui::MICRO)
+                        .color(theme::TEXT_SECONDARY)
+                        .wrapping(text::Wrapping::None),
+                ]
+                .spacing(3)
+                .align_y(iced::Alignment::Center),
+            );
+        }
+        col = col.push(ui::rule());
+        col = col.push(column![ui::label("BOMBS TO KILL, COVERT OPS V"), line.wrap()].spacing(2));
+    }
     col.into()
 }
 
@@ -334,12 +386,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         .get(app.target)
         .map(|p| p.name.as_str())
         .unwrap_or("target");
-    let colors = [
-        theme::EM,
-        theme::THERMAL,
-        theme::KINETIC,
-        theme::EXPLOSIVE,
-    ];
+    let colors = [theme::EM, theme::THERMAL, theme::KINETIC, theme::EXPLOSIVE];
     let total: f64 = o.damage.iter().fold(0.0, |sum, part| sum + part);
     let mut legend = row![].spacing(ui::GAP_ROW);
     for ((name, part), color) in rufa_sim::stats::DAMAGE_NAMES
@@ -363,23 +410,27 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         );
     }
     let split: El<'a> = if total > 0.0 {
-        container(
-            column![ui::split_bar(o.damage, colors, 4.0), legend.wrap()]
-                .spacing(3),
-        )
-        .padding(iced::Padding {
-            top: 5.0,
-            right: 0.0,
-            bottom: 2.0,
-            left: 0.0,
-        })
-        .into()
+        container(column![ui::split_bar(o.damage, colors, 4.0), legend.wrap()].spacing(3))
+            .padding(iced::Padding {
+                top: 5.0,
+                right: 0.0,
+                bottom: 2.0,
+                left: 0.0,
+            })
+            .into()
     } else {
         space().height(0).into()
     };
     let mut col = column![].spacing(2);
+    if o.dps > 0.0 {
+        let shown = if o.dps_spooled > o.dps + 0.05 {
+            format!("{} - {}", fmt::num(o.dps, 1), fmt::num(o.dps_spooled, 1))
+        } else {
+            fmt::num(o.dps, 1)
+        };
+        col = col.push(ui::stat_row(narrow, "Weapon DPS", shown));
+    }
     for (name, value) in [
-        ("Weapon DPS", o.dps),
         ("With reload", o.dps_with_reload),
         ("Volley", o.volley),
         ("Drone DPS", o.drone_dps),
@@ -643,6 +694,14 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
             narrow,
             "Drone control range",
             fmt::distance(t.drone_control_range),
+        ));
+    }
+    if t.jam_chance > 0.0 {
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Chance to be jammed",
+            format!("{} %", fmt::num(t.jam_chance, 1)),
+            theme::DANGER_TEXT,
         ));
     }
     if t.scan_resolution > 0.0 {
