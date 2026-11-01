@@ -1567,9 +1567,30 @@ impl App {
             keyboard::Event::KeyPressed { modifiers, .. }
             | keyboard::Event::KeyReleased { modifiers, .. } => self.modifiers = *modifiers,
         }
-        let keyboard::Event::KeyPressed { key, modifiers, .. } = event else {
+        let keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            physical_key,
+            ..
+        } = event
+        else {
             return Task::none();
         };
+        if modifiers.contains(Modifiers::CTRL) {
+            use keyboard::key::{Code, Physical};
+            let scale = self.settings.ui_scale;
+            let zoom = match physical_key {
+                Physical::Code(Code::Equal | Code::NumpadAdd | Code::NumpadEqual) => {
+                    Some(scale + 0.1)
+                }
+                Physical::Code(Code::Minus | Code::NumpadSubtract) => Some(scale - 0.1),
+                Physical::Code(Code::Digit0 | Code::Numpad0) => Some(1.0),
+                _ => None,
+            };
+            if let Some(scale) = zoom {
+                return self.update(Message::UiScale(scale));
+            }
+        }
         if !modifiers.contains(Modifiers::CTRL) {
             if let (Key::Named(keyboard::key::Named::Delete), Some(i)) = (&key, self.selected_item)
             {
