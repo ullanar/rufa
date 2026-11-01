@@ -83,23 +83,25 @@ jobs:
           ARCHIVE: ${{ matrix.archive }}
         run: |
           name="rufa-$TAG-$TARGET"
-          mkdir -p "dist/$name"
+          mkdir -p "dist/$name" dist/out
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp "target/$TARGET/release/rufa.exe" "dist/$name/"
+            cp "target/$TARGET/release/rufa.exe" "dist/out/$name.exe"
           else
             cp "target/$TARGET/release/rufa" "dist/$name/"
+            cp "target/$TARGET/release/rufa" "dist/out/$name"
           fi
           cp LICENSE README.md "dist/$name/"
           cd dist
           if [ "$ARCHIVE" = "zip" ]; then
-            7z a "$name.zip" "$name" > /dev/null
+            7z a "out/$name.zip" "$name" > /dev/null
           else
-            tar -czf "$name.tar.gz" "$name"
+            tar -czf "out/$name.tar.gz" "$name"
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target }}
-          path: dist/*.${{ matrix.archive }}
+          path: dist/out/*
           if-no-files-found: error
 
   publish:
