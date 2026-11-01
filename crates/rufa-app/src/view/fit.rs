@@ -937,8 +937,11 @@ fn item_row<'a>(
     let item = &doc.doc.fit.items[i];
     let result = doc.doc.calc.items.get(i);
     let state = result.map(|r| r.state).unwrap_or(item.state);
+    // A drone or a cargo row carries its own count field, so the name says it
+    // only where no field follows.
+    let counted = item.slot == Slot::DroneBay || item.slot == Slot::Cargo;
     let mut name = app.type_name(item.type_id).to_string();
-    if item.quantity > 1 {
+    if item.quantity > 1 && !counted {
         name = format!("{name}  ×{}", item.quantity);
     }
     let charge = item
@@ -1013,7 +1016,7 @@ fn item_row<'a>(
     .spacing(ui::GAP_ROW)
     .align_y(iced::Alignment::Center);
 
-    if item.slot == Slot::DroneBay || item.slot == Slot::Cargo {
+    if counted {
         let shown = match &app.quantity_edit {
             Some((at, text)) if *at == i => text.clone(),
             _ => item.quantity.to_string(),
