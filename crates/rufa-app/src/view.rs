@@ -11,6 +11,9 @@ use crate::ui::{self, El};
 use crate::{App, CenterTab, CharChoice, Message, Pane};
 
 pub fn root(app: &App) -> Element<'_, Message> {
+    if app.setup_prompt {
+        return install_screen(app);
+    }
     if app.downloading || app.download_error.is_some() {
         return first_run(app);
     }
@@ -46,6 +49,101 @@ pub fn root(app: &App) -> Element<'_, Message> {
         return stack![body, update_window(app)].into();
     }
     body.into()
+}
+
+fn paragraph(s: String) -> El<'static> {
+    text(s)
+        .size(ui::SMALL)
+        .color(theme::TEXT_SECONDARY)
+        .width(Length::Fill)
+        .into()
+}
+
+fn install_screen(app: &App) -> Element<'_, Message> {
+    let mut card = column![].spacing(ui::GAP_ROW).width(Length::Fill);
+    match &app.setup_done {
+        Some(placed) => {
+            card = card.push(ui::eyebrow("Installed"));
+            card = card.push(paragraph(placed.to_string_lossy().to_string()));
+            card = card.push(paragraph(
+                "The menu entry and the icon are in place on Linux.".to_string(),
+            ));
+            card = card.push(ui::rule());
+            card = card.push(
+                row![
+                    button(text("Start Rufa").size(ui::SMALL))
+                        .padding([3, 10])
+                        .style(theme::primary)
+                        .on_press(Message::SetupLaunch),
+                    button(text("Close").size(ui::SMALL))
+                        .padding([3, 10])
+                        .style(theme::ghost)
+                        .on_press(Message::SetupSkip),
+                ]
+                .spacing(ui::GAP),
+            );
+        }
+        None => {
+            card = card.push(ui::eyebrow(if app.setup_replacing {
+                "Replace the installed copy"
+            } else {
+                "Install Rufa"
+            }));
+            card = card.push(paragraph(
+                if app.setup_replacing {
+                    "Rufa is already installed. This build can take its place, with no download and no network."
+                } else {
+                    "This build runs from where it was downloaded. Installing copies it into your own directory, so no administrator rights are needed."
+                }
+                .to_string(),
+            ));
+            card = card.push(
+                text_input("install directory", &app.setup_dir)
+                    .on_input(Message::SetupDir)
+                    .padding(6)
+                    .size(ui::SMALL),
+            );
+            if let Some(error) = &app.setup_error {
+                card = card.push(
+                    text(error.clone())
+                        .size(ui::SMALL)
+                        .color(theme::DANGER_TEXT),
+                );
+            }
+            card = card.push(ui::rule());
+            card = card.push(
+                row![
+                    button(
+                        text(if app.setup_replacing {
+                            "Replace"
+                        } else {
+                            "Install"
+                        })
+                        .size(ui::SMALL)
+                    )
+                    .padding([3, 10])
+                    .style(theme::primary)
+                    .on_press(Message::SetupInstall),
+                    button(text("Run without installing").size(ui::SMALL))
+                        .padding([3, 10])
+                        .style(theme::ghost)
+                        .on_press(Message::SetupSkip),
+                ]
+                .spacing(ui::GAP),
+            );
+        }
+    }
+    container(
+        container(card)
+            .padding(ui::PAD * 2.0)
+            .style(theme::card)
+            .width(460),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .align_x(iced::alignment::Horizontal::Center)
+    .align_y(iced::alignment::Vertical::Center)
+    .into()
 }
 
 fn update_window(app: &App) -> El<'_> {
