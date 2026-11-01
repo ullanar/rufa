@@ -415,13 +415,18 @@ impl iced::widget::canvas::Program<Message> for Spinner {
 }
 
 fn center(app: &App) -> El<'_> {
-    let tab = |label: &'static str, which: CenterTab| {
-        button(text(label).size(ui::BODY).font(theme::UI_MEDIUM))
-            .padding([3, 10])
-            .style(theme::chip(app.center == which))
-            .on_press(Message::CenterTab(which))
-    };
-    let tabs = row![tab("Fit", CenterTab::Fit), tab("Graph", CenterTab::Graph)].spacing(ui::GAP);
+    let tabs = ui::segmented_wide(
+        [("Fit", CenterTab::Fit), ("Graph", CenterTab::Graph)]
+            .into_iter()
+            .map(|(label, which)| {
+                (
+                    label.to_string(),
+                    app.center == which,
+                    Message::CenterTab(which),
+                )
+            })
+            .collect(),
+    );
     let body = match app.center {
         CenterTab::Fit => fit::view(app),
         CenterTab::Graph => graph::view(app),
@@ -473,22 +478,24 @@ fn toolbar(app: &App) -> El<'_> {
 
     bar = bar.push(space().width(Length::Fill));
     bar = bar.push(ui::label("SKILLS"));
-    for level in [0u8, 5] {
-        bar = bar.push(
-            button(text(format!("All {level}")).size(ui::SMALL))
-                .padding([3, 9])
-                .style(theme::chip(app.current == CharChoice::All(level)))
-                .on_press(Message::SkillLevel(level)),
-        );
-    }
+    let mut who: Vec<(String, bool, Message)> = [0u8, 5]
+        .into_iter()
+        .map(|level| {
+            (
+                format!("All {level}"),
+                app.current == CharChoice::All(level),
+                Message::SkillLevel(level),
+            )
+        })
+        .collect();
     for (i, c) in app.characters.iter().enumerate() {
-        bar = bar.push(
-            button(text(&c.name).size(ui::SMALL))
-                .padding([3, 9])
-                .style(theme::chip(app.current == CharChoice::Saved(i)))
-                .on_press(Message::ChooseCharacter(CharChoice::Saved(i))),
-        );
+        who.push((
+            c.name.clone(),
+            app.current == CharChoice::Saved(i),
+            Message::ChooseCharacter(CharChoice::Saved(i)),
+        ));
     }
+    bar = bar.push(ui::segmented(who));
     container(bar)
         .padding([0.0, ui::PAD])
         .height(ui::TOOLBAR)

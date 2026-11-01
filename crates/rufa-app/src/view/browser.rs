@@ -11,20 +11,23 @@ use rufa_data::icons::Kind;
 use crate::{AddTo, App, CharChoice, LeftTab, Message};
 
 pub fn view(app: &App) -> El<'_> {
-    let tab = |label: &'static str, which: LeftTab| {
-        button(text(label).size(ui::BODY).font(theme::UI_MEDIUM))
-            .padding(ui::pill(10.0))
-            .style(theme::chip(app.left == which))
-            .on_press(Message::LeftTab(which))
-    };
-    let tabs = row![
-        tab("Ships", LeftTab::Ships),
-        tab("Fits", LeftTab::Fits),
-        tab("Market", LeftTab::Market),
-        tab("Skills", LeftTab::Character)
-    ]
-    .spacing(ui::GAP)
-    .wrap();
+    let tabs = ui::segmented_wide(
+        [
+            ("Ships", LeftTab::Ships),
+            ("Fits", LeftTab::Fits),
+            ("Market", LeftTab::Market),
+            ("Skills", LeftTab::Character),
+        ]
+        .into_iter()
+        .map(|(label, which)| {
+            (
+                label.to_string(),
+                app.left == which,
+                Message::LeftTab(which),
+            )
+        })
+        .collect(),
+    );
     let body = match app.left {
         LeftTab::Ships => ships(app),
         LeftTab::Fits => fits(app),
@@ -586,27 +589,32 @@ fn character(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
         return ui::muted("No game data loaded").into();
     };
-    let choice = |label: String, which: CharChoice| {
-        button(text(label).size(ui::SMALL))
-            .padding(ui::pill(8.0))
-            .style(theme::chip(app.current == which))
-            .on_press(Message::ChooseCharacter(which))
-    };
-    let mut picker = row![
-        choice("All 0".to_string(), CharChoice::All(0)),
-        choice("All 5".to_string(), CharChoice::All(5))
-    ]
-    .spacing(ui::GAP);
+    let mut options = vec![
+        ("All 0".to_string(), CharChoice::All(0)),
+        ("All 5".to_string(), CharChoice::All(5)),
+    ];
     for (i, c) in app.characters.iter().enumerate() {
-        picker = picker.push(choice(c.name.clone(), CharChoice::Saved(i)));
+        options.push((c.name.clone(), CharChoice::Saved(i)));
     }
-    picker = picker.push(
+    let picker = row![
+        ui::segmented(
+            options
+                .into_iter()
+                .map(|(label, which)| (
+                    label,
+                    app.current == which,
+                    Message::ChooseCharacter(which),
+                ))
+                .collect(),
+        ),
         button(text("+ New").size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(8.0))
             .style(theme::secondary)
             .on_press(Message::NewCharacter),
-    );
-    let picker = picker.wrap();
+    ]
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center)
+    .wrap();
 
     let login_label = if app.esi_pending {
         "Waiting for the browser"
