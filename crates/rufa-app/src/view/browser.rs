@@ -1,9 +1,11 @@
 use iced::Length;
-use iced::widget::{button, column, container, row, text, text_input};
+use iced::widget::{button, column, container, image, row, space, text, text_input};
 use rufa_data::catalog::MARKET_ROOTS;
 
 use crate::theme;
 use crate::ui::{self, El};
+use rufa_data::icons::Kind;
+
 use crate::{AddTo, App, CharChoice, LeftTab, Message};
 
 pub fn view(app: &App) -> El<'_> {
@@ -42,13 +44,30 @@ fn search<'a>(placeholder: &'a str, value: &'a str, on_input: fn(String) -> Mess
         .into()
 }
 
-fn list_button<'a>(label: String, msg: Message) -> El<'a> {
-    button(text(label).size(ui::BODY).wrapping(text::Wrapping::None))
-        .padding([3, 8])
-        .width(Length::Fill)
-        .style(theme::list_item(false))
-        .on_press(msg)
-        .into()
+/// The type's own picture, or the space it would take, so names stay aligned.
+fn icon_cell<'a>(app: &App, type_id: i32) -> El<'a> {
+    match app.icon(Kind::Icon, type_id) {
+        Some(handle) => image(handle).width(18).height(18).into(),
+        None => space().width(18).height(18).into(),
+    }
+}
+
+fn list_button<'a>(app: &App, type_id: i32, label: String, msg: Message) -> El<'a> {
+    button(
+        row![
+            icon_cell(app, type_id),
+            container(text(label).size(ui::BODY).wrapping(text::Wrapping::None))
+                .clip(true)
+                .width(Length::Fill),
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
+    )
+    .padding([3, 8])
+    .width(Length::Fill)
+    .style(theme::list_item(false))
+    .on_press(msg)
+    .into()
 }
 
 fn group_button<'a>(label: String, count: usize, msg: Message) -> El<'a> {
@@ -107,7 +126,7 @@ fn ships(app: &App) -> El<'_> {
                     continue;
                 }
                 hits += 1;
-                list = list.push(hull_button(&hull.name, &group.name, hull.id));
+                list = list.push(hull_button(app, &hull.name, &group.name, hull.id));
             }
         }
         if hits == 0 {
@@ -117,7 +136,12 @@ fn ships(app: &App) -> El<'_> {
         if let Some(group) = game.catalog.hull_groups().iter().find(|g| g.id == group_id) {
             list = list.push(back_button(group.name.clone(), Message::ShipGroup(None)));
             for hull in &group.hulls {
-                list = list.push(list_button(hull.name.clone(), Message::NewFit(hull.id)));
+                list = list.push(list_button(
+                    app,
+                    hull.id,
+                    hull.name.clone(),
+                    Message::NewFit(hull.id),
+                ));
             }
         }
     } else {
@@ -142,9 +166,10 @@ fn ships(app: &App) -> El<'_> {
     .into()
 }
 
-fn hull_button<'a>(name: &str, group: &str, id: i32) -> El<'a> {
+fn hull_button<'a>(app: &App, name: &str, group: &str, id: i32) -> El<'a> {
     button(
         row![
+            icon_cell(app, id),
             container(
                 text(name.to_string())
                     .size(ui::BODY)
@@ -199,14 +224,19 @@ fn fits(app: &App) -> El<'_> {
                 continue;
             }
             for (hull, fits) in hulls {
-                list = list.push(container(ui::eyebrow(app.type_name(hull))).padding(
-                    iced::Padding {
+                list = list.push(
+                    container(
+                        row![icon_cell(app, hull), ui::eyebrow(app.type_name(hull))]
+                            .spacing(ui::GAP_ROW)
+                            .align_y(iced::Alignment::Center),
+                    )
+                    .padding(iced::Padding {
                         top: 3.0,
                         right: 2.0,
                         bottom: 1.0,
                         left: 10.0,
-                    },
-                ));
+                    }),
+                );
                 for fit in fits {
                     list = list.push(fit_row(fit, open(fit), None, 14.0));
                 }
@@ -398,6 +428,8 @@ fn market(app: &App) -> El<'_> {
             }
             any = true;
             list = list.push(list_button(
+                app,
+                *id,
                 game.type_name(*id).to_string(),
                 Message::AddItem(*id),
             ));
@@ -447,7 +479,7 @@ fn market(app: &App) -> El<'_> {
                     .collect();
                 types.sort();
                 for (name, id) in types {
-                    list = list.push(list_button(name.to_string(), Message::AddItem(id)));
+                    list = list.push(list_button(app, id, name.to_string(), Message::AddItem(id)));
                 }
             }
         }

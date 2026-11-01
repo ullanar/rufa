@@ -719,6 +719,36 @@ impl App {
                 }
             }
         }
+        // What the browser shows right now, so a list is never a wall of text.
+        if let Ok(game) = &self.game {
+            for hull in self.saved.iter().filter_map(|fit| fit.hull) {
+                wanted.push((Kind::Icon, hull));
+            }
+            for id in &self.market_results {
+                wanted.push((Kind::Icon, *id));
+            }
+            if let Some(node) = self
+                .market_group
+                .and_then(|id| game.catalog.market_node(id))
+            {
+                for id in &node.types {
+                    wanted.push((Kind::Icon, *id));
+                }
+            }
+            let query = self.ship_search.trim().to_lowercase();
+            for group in game.catalog.hull_groups() {
+                let listed = self.ship_group == Some(group.id);
+                let searched = !query.is_empty() && group.name.to_lowercase().contains(&query);
+                for hull in &group.hulls {
+                    if listed
+                        || searched
+                        || (!query.is_empty() && hull.name.to_lowercase().contains(&query))
+                    {
+                        wanted.push((Kind::Icon, hull.id));
+                    }
+                }
+            }
+        }
         wanted.sort();
         wanted.dedup();
         wanted.retain(|k| !self.icons.contains_key(k) && !self.icons_pending.contains(k));
