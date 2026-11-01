@@ -198,6 +198,9 @@ pub enum Message {
     ImportText(Option<String>),
     Key(keyboard::Event),
     Downloaded(Result<String, String>),
+    DownloadProgress(rufa_data::update::Progress),
+    Tick,
+    RetryDownload,
     CenterTab(CenterTab),
     UiScale(f32),
     GraphKind(GraphKind),
@@ -230,6 +233,9 @@ pub struct Doc {
 
 pub struct App {
     pub downloading: bool,
+    pub download: Vec<rufa_data::update::Progress>,
+    pub download_error: Option<String>,
+    pub spin: f32,
     pub game: Result<&'static Game, String>,
     pub ids: Option<AttrIds>,
     pub settings: Settings,
@@ -297,6 +303,9 @@ impl App {
         });
         let mut app = App {
             downloading: false,
+            download: Vec::new(),
+            download_error: None,
+            spin: 0.0,
             game: Err("not loaded".to_string()),
             ids: None,
             settings,
@@ -344,12 +353,8 @@ impl App {
         app.prices = PriceCache::load(&app.config_dir);
         if rufa_data::update::needs_download(&data_dir) {
             app.downloading = true;
-            app.status = format!("Downloading game data into {}", data_dir.display());
-            let task = Task::perform(
-                async move { rufa_data::update::download(&data_dir, |_| {}).map_err(|e| e.to_string()) },
-                Message::Downloaded,
-            );
-            return (app, task);
+            app.status = format!("Getting the game data into {}", data_dir.display());
+            return (app, download_task(data_dir));
         }
         app.load_game(&data_dir);
         app.open_args();
@@ -872,35 +877,51 @@ impl App {
                 }
             }
             Message::CycleState(i) => {
-                let max = self.max_state(i);
+                let targets = self.state_targets(i);
+                let maxes: Vec<State> = targets.iter().map(|t| self.max_state(*t)).collect();
                 self.edit_active(|fit, _| {
-                    let current = fit
-                        .items
-                        .get(i)
-                        .map(|it| it.state)
-                        .unwrap_or(State::Offline);
-                    edit::set_state(fit, i, edit::cycle_state(current, max))
+                    for (t, max) in targets.iter().zip(maxes) {
+                        let _ = max;
+                        let current = fit
+                            .items
+                            .get(*t)
+                            .map(|it| it.state)
+                            .unwrap_or(State::Offline);
+                        edit::set_state(fit, *t, edit::cycle_state(current, max))?;
+                    }
+                    Ok(())
                 });
             }
             Message::ToggleOverload(i) => {
-                let max = self.max_state(i);
+                let targets = self.state_targets(i);
+                let maxes: Vec<State> = targets.iter().map(|t| self.max_state(*t)).collect();
                 self.edit_active(|fit, _| {
-                    let current = fit
-                        .items
-                        .get(i)
-                        .map(|it| it.state)
-                        .unwrap_or(State::Offline);
-                    edit::set_state(fit, i, edit::toggle_overload(current, max))
+                    for (t, max) in targets.iter().zip(maxes) {
+                        let _ = max;
+                        let current = fit
+                            .items
+                            .get(*t)
+                            .map(|it| it.state)
+                            .unwrap_or(State::Offline);
+                        edit::set_state(fit, *t, edit::toggle_overload(current, max))?;
+                    }
+                    Ok(())
                 });
             }
             Message::ToggleOffline(i) => {
+                let targets = self.state_targets(i);
+                let maxes: Vec<State> = targets.iter().map(|t| self.max_state(*t)).collect();
                 self.edit_active(|fit, _| {
-                    let current = fit
-                        .items
-                        .get(i)
-                        .map(|it| it.state)
-                        .unwrap_or(State::Offline);
-                    edit::set_state(fit, i, edit::toggle_offline(current))
+                    for (t, max) in targets.iter().zip(maxes) {
+                        let _ = max;
+                        let current = fit
+                            .items
+                            .get(*t)
+                            .map(|it| it.state)
+                            .unwrap_or(State::Offline);
+                        edit::set_state(fit, *t, edit::toggle_offline(current))?;
+                    }
+                    Ok(())
                 });
             }
             Message::RemoveItem(i) => {
@@ -1363,23 +1384,29 @@ impl App {
                     let _ = rufa_store::implants::save(&self.config_dir, &self.implant_sets);
                 }
             }
-            Message::UpdateSde => {
+            Message::UpdateSde | Message::RetryDownload => {
                 if !self.downloading {
                     self.downloading = true;
+                    self.download.clear();
+                    self.download_error = None;
                     let data_dir = rufa_data::data_dir();
-                    self.status = format!("Updating game data in {}", data_dir.display());
-                    return Task::perform(
-                        async move {
-                            rufa_data::update::download(&data_dir, |_| {})
-                                .map_err(|e| e.to_string())
-                        },
-                        Message::Downloaded,
-                    );
+                    self.status = format!("Getting the game data into {}", data_dir.display());
+                    return download_task(data_dir);
                 }
             }
+            Message::DownloadProgress(p) => {
+                match self.download.iter_mut().find(|d| d.file == p.file) {
+                    Some(slot) => *slot = p,
+                    None => self.download.push(p),
+                }
+            }
+            Message::Tick => self.spin = (self.spin + 0.06) % (2.0 * std::f32::consts::PI),
             Message::GraphVelocity(s) => self.graph_velocity = s,
             Message::Downloaded(result) => {
                 self.downloading = false;
+                if let Err(e) = &result {
+                    self.download_error = Some(e.clone());
+                }
                 match result {
                     Ok(_) => {
                         let data_dir = rufa_data::data_dir();
@@ -1394,12 +1421,7 @@ impl App {
                             }
                         }
                     }
-                    Err(e) => {
-                        self.status = format!(
-                            "Download failed: {e}. Put sde.dat into {} and restart.",
-                            rufa_data::data_dir().display()
-                        )
-                    }
+                    Err(e) => self.status = format!("Download failed: {e}"),
                 }
             }
             Message::Nothing => {}
@@ -1553,6 +1575,14 @@ impl App {
         self.docs.get(self.active).map(|d| &d.doc.fit)
     }
 
+    fn state_targets(&self, i: usize) -> Vec<usize> {
+        if self.selected.contains(&i) {
+            self.selected.iter().copied().collect()
+        } else {
+            vec![i]
+        }
+    }
+
     fn max_state(&self, i: usize) -> State {
         self.docs
             .get(self.active)
@@ -1619,12 +1649,46 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        keyboard::listen().map(Message::Key)
+        let keys = keyboard::listen().map(Message::Key);
+        if self.downloading {
+            Subscription::batch([keys, iced::window::frames().map(|_| Message::Tick)])
+        } else {
+            keys
+        }
     }
 
     fn view(&self) -> Element<'_, Message> {
         view::root(self)
     }
+}
+
+fn download_task(data_dir: PathBuf) -> Task<Message> {
+    Task::run(
+        iced::stream::channel(256, async move |tx| {
+            let (sync_tx, sync_rx) = std::sync::mpsc::channel::<Message>();
+            let dir = data_dir.clone();
+            std::thread::spawn(move || {
+                let progress_tx = sync_tx.clone();
+                let result = rufa_data::update::download(&dir, |p| {
+                    let _ = progress_tx.send(Message::DownloadProgress(p));
+                })
+                .map_err(|e| e.to_string());
+                let _ = sync_tx.send(Message::Downloaded(result));
+            });
+            let mut tx = tx;
+            while let Ok(message) = sync_rx.recv() {
+                let done = matches!(message, Message::Downloaded(_));
+                use iced::futures::SinkExt;
+                if tx.send(message).await.is_err() {
+                    break;
+                }
+                if done {
+                    break;
+                }
+            }
+        }),
+        |m| m,
+    )
 }
 
 fn looks_like_dna(text: &str) -> bool {

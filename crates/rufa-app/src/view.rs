@@ -11,21 +11,8 @@ use crate::ui::{self, El};
 use crate::{App, CenterTab, CharChoice, Message, Pane};
 
 pub fn root(app: &App) -> Element<'_, Message> {
-    if app.downloading {
-        return container(
-            column![
-                text("RUFA")
-                    .font(theme::UI_SEMI)
-                    .size(ui::HERO)
-                    .color(theme::TEXT),
-                ui::body(&app.status),
-                ui::muted("Three files from github.com/EVEShipFit/sde-patched, about 25 MB."),
-            ]
-            .spacing(10)
-            .align_x(iced::Alignment::Center),
-        )
-        .center(Length::Fill)
-        .into();
+    if app.downloading || app.download_error.is_some() {
+        return first_run(app);
     }
     let grid = pane_grid(&app.panes, |_, pane, _| {
         let body: El<'_> = match pane {
@@ -55,6 +42,160 @@ pub fn root(app: &App) -> Element<'_, Message> {
     ]
     .spacing(ui::GAP)
     .into()
+}
+
+fn first_run(app: &App) -> El<'_> {
+    use crate::fmt;
+    let total: u64 = app.download.iter().map(|d| d.total.unwrap_or(0)).sum();
+    let received: u64 = app.download.iter().map(|d| d.received).sum();
+    let mut files = column![].spacing(ui::GAP_ROW);
+    for name in rufa_data::update::FILES {
+        let (done, fraction, size) = match app.download.iter().find(|d| d.file == name) {
+            Some(d) => {
+                let fraction = d
+                    .total
+                    .map(|t| d.received as f32 / t.max(1) as f32)
+                    .unwrap_or(0.0);
+                let size = match d.total {
+                    Some(t) => format!(
+                        "{} / {} MB",
+                        fmt::num(d.received as f64 / 1e6, 1),
+                        fmt::num(t as f64 / 1e6, 1)
+                    ),
+                    None => format!("{} MB", fmt::num(d.received as f64 / 1e6, 1)),
+                };
+                (fraction >= 1.0, fraction, size)
+            }
+            None => (false, 0.0, "waiting".to_string()),
+        };
+        let color = if done {
+            theme::SUCCESS_TEXT
+        } else {
+            theme::ACCENT
+        };
+        files = files.push(
+            column![
+                row![
+                    ui::body(describe_file(name)).width(Length::Fill),
+                    ui::small(size)
+                ]
+                .align_y(iced::Alignment::Center),
+                ui::bar(fraction, color, 6.0),
+            ]
+            .spacing(4),
+        );
+    }
+    let headline = match &app.download_error {
+        Some(_) => "The download did not finish".to_string(),
+        None if total > 0 => format!(
+            "Getting the game data  ·  {:.0}%",
+            received as f64 / total as f64 * 100.0
+        ),
+        None => "Getting the game data".to_string(),
+    };
+    let mut card = column![
+        row![
+            iced::widget::canvas(Spinner { angle: app.spin, failed: app.download_error.is_some() })
+                .width(36)
+                .height(36),
+            column![
+                text("RUFA").font(theme::LABEL).size(ui::TITLE).color(theme::ACCENT),
+                ui::title(headline),
+            ]
+            .spacing(2),
+        ]
+        .spacing(ui::PAD)
+        .align_y(iced::Alignment::Center),
+        ui::muted("Ship, module and attribute tables from EVEShipFit's sde-patched. This happens once; later starts are instant."),
+        files,
+    ]
+    .spacing(16)
+    .max_width(520);
+    if let Some(error) = &app.download_error {
+        card = card.push(
+            container(
+                column![
+                    ui::body(error.clone()),
+                    ui::muted(format!("Files go to {}", rufa_data::data_dir().display()))
+                ]
+                .spacing(4),
+            )
+            .padding([8, 12])
+            .width(Length::Fill)
+            .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE)),
+        );
+        card = card.push(
+            button(text("Try again").size(ui::BODY))
+                .padding([6, 14])
+                .style(theme::primary)
+                .on_press(Message::RetryDownload),
+        );
+    } else {
+        card = card.push(ui::small(format!(
+            "Saved to {}",
+            rufa_data::data_dir().display()
+        )));
+    }
+    container(container(card).padding(28).style(theme::card))
+        .center(Length::Fill)
+        .into()
+}
+
+fn describe_file(name: &str) -> &'static str {
+    match name {
+        rufa_data::SDE_FILE => "Game data: types, attributes, effects",
+        rufa_data::NAMES_FILE => "Type names in every language",
+        _ => "Attribute tooltips and hull bonuses",
+    }
+}
+
+struct Spinner {
+    angle: f32,
+    failed: bool,
+}
+
+impl iced::widget::canvas::Program<Message> for Spinner {
+    type State = ();
+
+    fn draw(
+        &self,
+        _: &(),
+        renderer: &iced::Renderer,
+        _: &iced::Theme,
+        bounds: iced::Rectangle,
+        _: iced::mouse::Cursor,
+    ) -> Vec<iced::widget::canvas::Geometry> {
+        use iced::widget::canvas::{Frame, Path, Stroke};
+        let mut frame = Frame::new(renderer, bounds.size());
+        let center = iced::Point::new(bounds.width / 2.0, bounds.height / 2.0);
+        let radius = bounds.width.min(bounds.height) / 2.0 - 3.0;
+        frame.stroke(
+            &Path::circle(center, radius),
+            Stroke::default().with_color(theme::TRACK).with_width(3.0),
+        );
+        if self.failed {
+            frame.stroke(
+                &Path::circle(center, radius),
+                Stroke::default()
+                    .with_color(theme::DANGER_TEXT)
+                    .with_width(3.0),
+            );
+            return vec![frame.into_geometry()];
+        }
+        let arc = Path::new(|b| {
+            b.arc(iced::widget::canvas::path::Arc {
+                center,
+                radius,
+                start_angle: iced::Radians(self.angle),
+                end_angle: iced::Radians(self.angle + 1.6),
+            });
+        });
+        frame.stroke(
+            &arc,
+            Stroke::default().with_color(theme::ACCENT).with_width(3.0),
+        );
+        vec![frame.into_geometry()]
+    }
 }
 
 fn center(app: &App) -> El<'_> {
