@@ -1,6 +1,7 @@
 pub mod catalog;
 pub mod esi;
 mod game;
+pub mod icons;
 pub mod price;
 pub mod update;
 

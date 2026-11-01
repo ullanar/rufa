@@ -6,9 +6,10 @@ mod view;
 use std::path::PathBuf;
 
 use iced::keyboard::{self, Key, Modifiers};
-use iced::widget::pane_grid;
+use iced::widget::{image, pane_grid};
 use iced::{Element, Subscription, Task, clipboard};
 use rufa_data::Game;
+use rufa_data::icons::Kind;
 use rufa_sim::attrs::AttrIds;
 use rufa_sim::document::Document;
 use rufa_sim::projection::Projected;
@@ -191,6 +192,7 @@ pub enum Message {
     DeleteTargetProfile(usize),
     PricesFetched(Result<std::collections::BTreeMap<i32, f64>, String>),
     RefreshPrices,
+    IconsFetched(Vec<(Kind, i32, PathBuf)>),
     LatestTag(Result<String, String>),
     UpdateSde,
     ApplyImplantSet(usize),
@@ -243,6 +245,8 @@ pub struct App {
     pub target_name: String,
     pub target_resists: [String; 4],
     pub esi_pending: bool,
+    pub icons: std::collections::HashMap<(Kind, i32), image::Handle>,
+    pub icons_pending: std::collections::HashSet<(Kind, i32)>,
 }
 
 impl App {
@@ -302,6 +306,8 @@ impl App {
             target_name: String::new(),
             target_resists: Default::default(),
             esi_pending: false,
+            icons: Default::default(),
+            icons_pending: Default::default(),
         };
         app.implant_sets = rufa_store::implants::load(&app.config_dir);
         app.targets = rufa_store::targets::load(&app.config_dir);
@@ -317,7 +323,7 @@ impl App {
         }
         app.load_game(&data_dir);
         app.open_args();
-        let prices = app.fetch_prices();
+        let prices = Task::batch([app.fetch_prices(), app.fetch_icons()]);
         let check = Task::perform(
             async { rufa_data::update::latest_tag().map_err(|e| e.to_string()) },
             Message::LatestTag,
@@ -507,6 +513,48 @@ impl App {
                 )
         });
         self.prices.stale(wanted)
+    }
+
+    pub fn icon(&self, kind: Kind, type_id: i32) -> Option<image::Handle> {
+        self.icons.get(&(kind, type_id)).cloned()
+    }
+
+    fn wanted_icons(&self) -> Vec<(Kind, i32)> {
+        let mut wanted = Vec::new();
+        for d in &self.docs {
+            wanted.push((Kind::Render, d.doc.fit.ship.type_id));
+            for it in &d.doc.fit.items {
+                wanted.push((Kind::Icon, it.type_id));
+                if let Some(c) = &it.charge {
+                    wanted.push((Kind::Icon, c.type_id));
+                }
+            }
+        }
+        wanted.sort();
+        wanted.dedup();
+        wanted.retain(|k| !self.icons.contains_key(k) && !self.icons_pending.contains(k));
+        wanted
+    }
+
+    fn fetch_icons(&mut self) -> Task<Message> {
+        let dir = rufa_data::data_dir();
+        let mut missing = Vec::new();
+        for key in self.wanted_icons() {
+            let file = rufa_data::icons::path(&dir, key.0, key.1);
+            if file.is_file() {
+                self.icons.insert(key, image::Handle::from_path(file));
+            } else {
+                missing.push(key);
+            }
+        }
+        if missing.is_empty() {
+            return Task::none();
+        }
+        self.icons_pending.extend(missing.iter().copied());
+        Task::perform(
+            async move { rufa_data::icons::fetch(&dir, &missing) },
+            Message::IconsFetched,
+        )
     }
 
     fn fetch_prices(&mut self) -> Task<Message> {
@@ -990,6 +1038,14 @@ impl App {
                 }
             }
             Message::RefreshPrices => return self.fetch_prices(),
+            Message::IconsFetched(list) => {
+                for (kind, type_id, file) in list {
+                    self.icons_pending.remove(&(kind, type_id));
+                    self.icons
+                        .insert((kind, type_id), image::Handle::from_path(file));
+                }
+                self.icons_pending.clear();
+            }
             Message::LatestTag(result) => {
                 if let Ok(latest) = result {
                     let installed = rufa_data::update::installed_tag(&rufa_data::data_dir());
@@ -1107,7 +1163,7 @@ impl App {
             }
             Message::Nothing => {}
         }
-        self.fetch_prices()
+        Task::batch([self.fetch_prices(), self.fetch_icons()])
     }
 
     fn charge_targets(&self, game: &'static Game, ids: AttrIds, type_id: i32) -> Vec<usize> {
