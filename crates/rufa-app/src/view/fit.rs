@@ -1005,7 +1005,7 @@ fn item_row<'a>(
     };
 
     let icon: El<'a> = match app.icon(Kind::Icon, item.type_id) {
-        Some(handle) => image(handle).width(18).height(18).into(),
+        Some(handle) => image(handle).width(18).height(18).border_radius(3.0).into(),
         None => space().width(18).height(18).into(),
     };
     let mut line = row![
@@ -1353,7 +1353,7 @@ fn charge_cell<'a>(i: usize, charge: String, width: f32, icon: Option<image::Han
         return space().width(width).into();
     }
     let picture: El<'a> = match icon {
-        Some(handle) => image(handle).width(14).height(14).into(),
+        Some(handle) => image(handle).width(14).height(14).border_radius(2.0).into(),
         None => space().width(14).height(14).into(),
     };
     mouse_area(
