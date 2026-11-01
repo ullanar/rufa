@@ -1,0 +1,11 @@
+[package]
+name = "rufa-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+esf-dogma-engine.workspace = true
+esf-format.workspace = true
+rufa-data.workspace = true

@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+default-members = ["crates/rufa-app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.95"
+
+[workspace.dependencies]
+esf-data = "13.7"
+esf-dogma-engine = "13.7"
+esf-format = "13.7"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+serde_json = "1"
+ring = "0.17"
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "x11", "wayland", "thread-pool", "canvas"] }
+
+rufa-data = { path = "crates/rufa-data" }
+rufa-sim = { path = "crates/rufa-sim" }
+rufa-store = { path = "crates/rufa-store" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 2

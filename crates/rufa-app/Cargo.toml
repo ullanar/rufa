@@ -1,0 +1,16 @@
+[package]
+name = "rufa-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rufa"
+path = "src/main.rs"
+
+[dependencies]
+iced.workspace = true
+rufa-data.workspace = true
+rufa-sim.workspace = true
+rufa-store.workspace = true

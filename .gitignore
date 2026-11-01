@@ -1,0 +1,17 @@
+# build
+/target
+/dist
+*.profraw
+
+# local game data and test fixtures
+/.sde
+*.dat
+
+# editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# local notes, not part of the project yet
+/docs/

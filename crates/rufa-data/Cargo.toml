@@ -1,0 +1,12 @@
+[package]
+name = "rufa-data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+esf-data.workspace = true
+ureq.workspace = true
+serde_json.workspace = true
+ring.workspace = true
