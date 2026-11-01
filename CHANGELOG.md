@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/ullanar/rufa/compare/v0.4.0...v0.5.0) (2026-11-01)
+
+
+### Features
+
+* **app:** a Start Menu shortcut and a Path entry on windows ([d1734c9](https://github.com/ullanar/rufa/commit/d1734c9ce7bb0ab557dd018f7ff15eb966ae93cf))
+* **app:** give the window an icon ([fe106e4](https://github.com/ullanar/rufa/commit/fe106e4b9a5fc759c0202173d3a61686d3aec0ac))
+* **app:** install the downloaded build into a per user directory ([33df7b2](https://github.com/ullanar/rufa/commit/33df7b2a72ea260c8921aecff9e5ab3e482f1e86))
+* **app:** pin the violations strip above the status bar ([7d020d2](https://github.com/ullanar/rufa/commit/7d020d2d580d86921145b0ef7f25b3605ea773de))
+* offer the newer release and swap the running build ([b310d60](https://github.com/ullanar/rufa/commit/b310d60a53a15486a5b584ae706ec3472de2b463))
+
+
+### Bug Fixes
+
+* **app:** any cargo target directory counts as a build tree ([4826544](https://github.com/ullanar/rufa/commit/48265440bc23300cfff53fd80d7c4079fdbf94b3))
+* **app:** any cargo target directory counts as a build tree ([9ad2504](https://github.com/ullanar/rufa/commit/9ad2504751442b3e4c282a6cf4102ca30e974bfc))
+* **app:** keep the group count clear of a long group name ([2b395ea](https://github.com/ullanar/rufa/commit/2b395eaa3b2b9cb8ede6edd297ae3ccfc5698710))
+* **app:** the window application id is a Linux only field ([a5107bd](https://github.com/ullanar/rufa/commit/a5107bd19d0c4a0276dac9e448ec67e4eb8e9a2b))
+* **store:** keep the ui scale across restarts ([c1c63a7](https://github.com/ullanar/rufa/commit/c1c63a7d314a8c84b9e7b91ad78b7d8f86d5d15e))
+
 ## [0.4.0](https://github.com/ullanar/rufa/compare/v0.3.0...v0.4.0) (2026-11-01)
 
 
