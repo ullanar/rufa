@@ -457,7 +457,7 @@ fn toolbar(app: &App) -> El<'_> {
             .on_input(Message::RenameFit)
             .width(260)
             .size(ui::BODY)
-            .padding([5, 8])
+            .padding(ui::field(5.0, 8.0))
             .style(theme::input),
         action("Save", Message::Save),
         action("Undo", Message::Undo),

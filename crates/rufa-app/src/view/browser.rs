@@ -9,7 +9,7 @@ use crate::{App, CharChoice, LeftTab, Message};
 pub fn view(app: &App) -> El<'_> {
     let tab = |label: &'static str, which: LeftTab| {
         button(text(label).size(ui::BODY).font(theme::UI_MEDIUM))
-            .padding([3, 10])
+            .padding(ui::pill(10.0))
             .style(theme::chip(app.left == which))
             .on_press(Message::LeftTab(which))
     };
@@ -37,7 +37,7 @@ fn search<'a>(placeholder: &'a str, value: &'a str, on_input: fn(String) -> Mess
     text_input(placeholder, value)
         .on_input(on_input)
         .size(ui::BODY)
-        .padding([5, 8])
+        .padding(ui::field(5.0, 8.0))
         .style(theme::input)
         .into()
 }
@@ -359,7 +359,7 @@ fn market(app: &App) -> El<'_> {
     };
     let mode = |label: &'static str, on: bool| {
         button(text(label).size(ui::MICRO))
-            .padding([2, 7])
+            .padding(ui::pill_tight(7.0))
             .style(theme::chip(app.project_mode == on))
             .on_press(Message::ProjectMode(on))
     };
@@ -446,7 +446,7 @@ fn character(app: &App) -> El<'_> {
     };
     let choice = |label: String, which: CharChoice| {
         button(text(label).size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(8.0))
             .style(theme::chip(app.current == which))
             .on_press(Message::ChooseCharacter(which))
     };
@@ -481,7 +481,7 @@ fn character(app: &App) -> El<'_> {
         text_input("ESI client id", &app.settings.esi_client_id)
             .on_input(Message::EsiClientId)
             .size(ui::SMALL)
-            .padding([4, 8])
+            .padding(ui::field(4.0, 8.0))
             .style(theme::input),
         login,
     ]
@@ -524,7 +524,7 @@ fn character(app: &App) -> El<'_> {
         text_input("Character name", &current.name)
             .on_input(Message::RenameCharacter)
             .size(ui::BODY)
-            .padding([4, 8])
+            .padding(ui::field(4.0, 8.0))
             .style(theme::input),
         button(text("Delete").size(ui::SMALL))
             .padding([3, 8])
@@ -546,7 +546,7 @@ fn character(app: &App) -> El<'_> {
         text_input("Search skills", &app.skill_search)
             .on_input(Message::SkillSearch)
             .size(ui::SMALL)
-            .padding([4, 8])
+            .padding(ui::field(4.0, 8.0))
             .style(theme::input),
     ]
     .spacing(ui::GAP)
@@ -570,7 +570,7 @@ fn character(app: &App) -> El<'_> {
             for l in 0..=5u8 {
                 levels = levels.push(
                     button(text(l.to_string()).size(ui::MICRO))
-                        .padding([0, 5])
+                        .padding(ui::pill_tight(5.0))
                         .style(theme::chip(l == level))
                         .on_press(Message::SetSkill(skill.id, l)),
                 );

@@ -1,7 +1,7 @@
 use rufa_data::{Info, catalog::category};
 
 use crate::attrs::AttrIds;
-use crate::{FitItem, Slot, State};
+use crate::{Fit, FitItem, Slot, State};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rack {
@@ -121,6 +121,18 @@ pub fn initial_state(placement: Placement) -> State {
         Placement::Drone | Placement::Fighter => State::Active,
         Placement::Implant(_) | Placement::Booster(_) => State::Online,
         Placement::Charge | Placement::Cargo => State::Offline,
+    }
+}
+
+/// An implant or a booster works from the moment it is plugged in, so a fit
+/// that arrives with one switched off carries a quirk of the file, not a
+/// choice. Switching one off stays a look inside the session: the next load
+/// turns it back on.
+pub fn wake_the_head(fit: &mut Fit) {
+    for item in &mut fit.items {
+        if matches!(item.slot, Slot::Implant(_) | Slot::Booster(_)) {
+            item.state = State::Online;
+        }
     }
 }
 

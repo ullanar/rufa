@@ -49,7 +49,7 @@ pub fn view(app: &App) -> El<'_> {
                 container(
                     row![
                         button(label)
-                            .padding([4, 8])
+                            .padding(ui::field(4.0, 8.0))
                             .style(theme::tab(active))
                             .on_press(Message::SelectTab(i)),
                         close,
@@ -244,10 +244,17 @@ fn summary<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
     .spacing(ui::PAD);
     if let Some(price) = app.fit_price(doc) {
         line = line.push(figure(
-            "PRICE",
-            format!("{} ISK", fmt::short(price)),
+            "FIT",
+            format!("{} ISK", fmt::short(price.hull)),
             theme::TEXT_SECONDARY,
         ));
+        if price.head > 0.0 {
+            line = line.push(figure(
+                "HEAD",
+                format!("{} ISK", fmt::short(price.head)),
+                theme::TEXT_SECONDARY,
+            ));
+        }
     }
     line.wrap().into()
 }
@@ -366,7 +373,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                 .to_string();
             line = line.push(
                 button(text(name).size(ui::SMALL))
-                    .padding([2, 8])
+                    .padding(ui::pill(8.0))
                     .style(theme::chip(fit.ship.mode == Some(mode)))
                     .on_press(Message::SetMode(Some(mode))),
             );
@@ -576,7 +583,7 @@ fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u
             ))
             .size(ui::SMALL),
         )
-        .padding([4, 8])
+        .padding(ui::field(4.0, 8.0))
         .style(theme::tooltip),
         tooltip::Position::Left,
     )
@@ -780,7 +787,7 @@ fn implant_sets(app: &App) -> El<'_> {
     let mut line = row![
         ui::label("IMPLANT SETS"),
         button(text("save current").size(ui::SMALL))
-            .padding([2, 8])
+            .padding(ui::pill(8.0))
             .style(theme::ghost)
             .on_press(Message::SaveImplantSet),
     ]
@@ -790,7 +797,7 @@ fn implant_sets(app: &App) -> El<'_> {
         line = line.push(
             row![
                 button(text(&set.name).size(ui::SMALL))
-                    .padding([2, 8])
+                    .padding(ui::pill(8.0))
                     .style(theme::chip(false))
                     .on_press(Message::ApplyImplantSet(i)),
                 button(text("×").size(ui::SMALL))
@@ -834,7 +841,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
             container(
                 pick_list(options, Some(selected), Message::Environment)
                     .text_size(ui::SMALL)
-                    .padding([4, 8])
+                    .padding(ui::field(4.0, 8.0))
                     .style(theme::picker),
             )
             .padding([1, 2]),
@@ -851,7 +858,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         any_tab = true;
         tabs = tabs.push(
             button(text(app.fit_title(other)).size(ui::SMALL))
-                .padding([2, 8])
+                .padding(ui::pill(8.0))
                 .style(theme::chip(false))
                 .on_press(Message::ProjectFit(i)),
         );
@@ -945,23 +952,35 @@ fn item_row<'a>(
         rail
     };
 
-    let glyph = tooltip(
-        mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
-            .on_press(Message::CycleState(i))
-            .on_right_press(Message::ToggleOverload(i))
-            .on_middle_press(Message::ToggleOffline(i)),
-        container(
-            text(format!(
-                "{}  ·  click: online / active, right: overheat, middle: offline",
-                state_name(state)
-            ))
-            .size(ui::SMALL),
+    // Cargo carries no state. An implant or a booster works the moment it is
+    // plugged in, and the engine applies it whatever the state says, so a
+    // control there would lie about what the numbers do.
+    let glyph: El<'a> = if item.slot == Slot::Cargo {
+        space().width(18).into()
+    } else if matches!(item.slot, Slot::Implant(_) | Slot::Booster(_)) {
+        container(ui::state_glyph(State::Online))
+            .padding([0, 2])
+            .into()
+    } else {
+        tooltip(
+            mouse_area(container(ui::state_glyph(state)).padding([0, 2]))
+                .on_press(Message::CycleState(i))
+                .on_right_press(Message::ToggleOverload(i))
+                .on_middle_press(Message::ToggleOffline(i)),
+            container(
+                text(format!(
+                    "{}  ·  click: online / active, right: overheat, middle: offline",
+                    state_name(state)
+                ))
+                .size(ui::SMALL),
+            )
+            .padding(ui::field(4.0, 8.0))
+            .style(theme::tooltip),
+            tooltip::Position::Right,
         )
-        .padding([4, 8])
-        .style(theme::tooltip),
-        tooltip::Position::Right,
-    )
-    .delay(std::time::Duration::from_millis(400));
+        .delay(std::time::Duration::from_millis(400))
+        .into()
+    };
 
     let icon: El<'a> = match app.icon(Kind::Icon, item.type_id) {
         Some(handle) => image(handle).width(18).height(18).into(),
@@ -1050,7 +1069,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
     .spacing(ui::GAP);
     let chip = |label: String, on: bool, msg: Message| {
         button(text(label).size(ui::SMALL))
-            .padding([2, 7])
+            .padding(ui::pill_tight(7.0))
             .style(theme::chip(on))
             .on_press(msg)
     };
@@ -1134,7 +1153,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
                                 .clip(true)
                                 .width(Length::Fill),
                             )
-                            .padding([2, 8])
+                            .padding(ui::pill(8.0))
                             .width(Length::Fill)
                             .style(theme::list_item(on))
                             .on_press(Message::MenuVariant(id)),
