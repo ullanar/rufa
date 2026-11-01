@@ -551,12 +551,15 @@ fn item_row<'a>(app: &'a App, doc: &'a Doc, i: usize, rail: Color, compact: bool
         container(space().width(3).height(14)).style(theme::rounded(rail_shown, 1.5)),
         glyph,
         icon,
-        text(ui::clip(&name, if compact { 28 } else { 40 }))
-            .size(ui::BODY)
-            .font(theme::UI_MEDIUM)
-            .color(theme::TEXT)
-            .width(Length::Fill)
-            .wrapping(text::Wrapping::None),
+        container(
+            text(ui::clip(&name, if compact { 28 } else { 40 }))
+                .size(ui::BODY)
+                .font(theme::UI_MEDIUM)
+                .color(theme::TEXT)
+                .wrapping(text::Wrapping::None)
+        )
+        .clip(true)
+        .width(Length::Fill),
         charge_cell(i, charge, if compact { 90.0 } else { 150.0 }),
         text(if compact {
             String::new()

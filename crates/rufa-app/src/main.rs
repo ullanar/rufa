@@ -18,6 +18,11 @@ use rufa_sim::projection::Projected;
 use rufa_sim::{Fit, State, edit};
 use rufa_store::{Character, ImplantSet, PriceCache, SavedFit, Settings, TargetProfile};
 
+const MIN_WINDOW: (f32, f32) = (900.0, 600.0);
+const MIN_BROWSER: f32 = 160.0;
+const MIN_FIT: f32 = 300.0;
+const MIN_STATS: f32 = 200.0;
+
 fn main() -> iced::Result {
     let mut application = iced::application(App::boot, App::update, App::view)
         .title(App::title)
@@ -25,7 +30,11 @@ fn main() -> iced::Result {
         .style(theme::root)
         .subscription(App::subscription)
         .scale_factor(|app: &App| app.settings.ui_scale.clamp(0.75, 2.5))
-        .window_size((1440.0, 900.0))
+        .window(iced::window::Settings {
+            size: iced::Size::new(1440.0, 900.0),
+            min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
+            ..Default::default()
+        })
         .default_font(theme::UI)
         .antialiasing(true);
     for font in theme::FONTS {
@@ -136,6 +145,8 @@ impl std::fmt::Display for EnvChoice {
 #[derive(Debug, Clone)]
 pub enum Message {
     PaneResized(pane_grid::ResizeEvent),
+    SaveSettings(u64),
+    WindowResized(iced::Size),
     LeftTab(LeftTab),
     ShipSearch(String),
     ShipGroup(Option<i32>),
@@ -236,6 +247,8 @@ pub struct App {
     pub download: Vec<rufa_data::update::Progress>,
     pub download_error: Option<String>,
     pub spin: f32,
+    pub settings_gen: u64,
+    pub window_width: f32,
     pub game: Result<&'static Game, String>,
     pub ids: Option<AttrIds>,
     pub settings: Settings,
@@ -306,6 +319,8 @@ impl App {
             download: Vec::new(),
             download_error: None,
             spin: 0.0,
+            settings_gen: 0,
+            window_width: 1440.0,
             game: Err("not loaded".to_string()),
             ids: None,
             settings,
@@ -646,12 +661,30 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::WindowResized(size) => {
+                self.window_width = size.width;
+                self.clamp_panes();
+            }
             Message::PaneResized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
+                self.clamp_panes();
                 let (browser, fit) = self.pane_ratios();
                 self.settings.browser_ratio = browser;
                 self.settings.fit_ratio = fit;
-                let _ = self.settings.save(&self.config_dir);
+                self.settings_gen += 1;
+                let generation = self.settings_gen;
+                return Task::perform(
+                    async move {
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        generation
+                    },
+                    Message::SaveSettings,
+                );
+            }
+            Message::SaveSettings(generation) => {
+                if generation == self.settings_gen {
+                    let _ = self.settings.save(&self.config_dir);
+                }
             }
             Message::LeftTab(tab) => self.left = tab,
             Message::ShipSearch(s) => self.ship_search = s,
@@ -1495,6 +1528,38 @@ impl App {
         self.update(Message::ChooseCharacter(CharChoice::Saved(index)))
     }
 
+    fn clamp_panes(&mut self) {
+        use pane_grid::Node;
+        let width = self.window_width / self.settings.ui_scale.clamp(0.75, 2.5);
+        let Node::Split { id, ratio, b, .. } = self.panes.layout() else {
+            return;
+        };
+        let (outer, inner) = (*id, *ratio);
+        let inner_split = match b.as_ref() {
+            Node::Split { id, ratio, .. } => Some((*id, *ratio)),
+            Node::Pane(_) => None,
+        };
+        let low = MIN_BROWSER / width;
+        let high = 1.0 - (MIN_FIT + MIN_STATS) / width;
+        let outer_ratio = if low < high {
+            inner.clamp(low, high)
+        } else {
+            inner
+        };
+        self.panes.resize(outer, outer_ratio);
+        if let Some((id, ratio)) = inner_split {
+            let rest = width * (1.0 - outer_ratio);
+            let low = MIN_FIT / rest;
+            let high = 1.0 - MIN_STATS / rest;
+            let clamped = if low < high {
+                ratio.clamp(low, high)
+            } else {
+                ratio
+            };
+            self.panes.resize(id, clamped);
+        }
+    }
+
     fn pane_ratios(&self) -> (f32, f32) {
         use pane_grid::Node;
         match self.panes.layout() {
@@ -1650,10 +1715,11 @@ impl App {
 
     fn subscription(&self) -> Subscription<Message> {
         let keys = keyboard::listen().map(Message::Key);
+        let sizes = iced::window::resize_events().map(|(_, size)| Message::WindowResized(size));
         if self.downloading {
-            Subscription::batch([keys, iced::window::frames().map(|_| Message::Tick)])
+            Subscription::batch([keys, sizes, iced::window::frames().map(|_| Message::Tick)])
         } else {
-            keys
+            Subscription::batch([keys, sizes])
         }
     }
 

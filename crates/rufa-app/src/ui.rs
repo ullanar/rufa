@@ -31,6 +31,7 @@ pub fn label<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
         .font(theme::LABEL)
         .size(LABEL)
         .color(theme::TEXT_SECONDARY)
+        .wrapping(text::Wrapping::None)
 }
 
 pub fn eyebrow<'a>(s: &str) -> text::Text<'a> {
@@ -49,6 +50,7 @@ pub fn small<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
         .font(theme::UI)
         .size(SMALL)
         .color(theme::TEXT_SECONDARY)
+        .wrapping(text::Wrapping::None)
 }
 
 pub fn muted<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
@@ -60,10 +62,19 @@ pub fn value<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
         .font(theme::UI_MEDIUM)
         .size(VALUE)
         .color(theme::TEXT)
+        .wrapping(text::Wrapping::None)
 }
 
 pub fn value_colored<'a>(s: impl text::IntoFragment<'a>, color: Color) -> text::Text<'a> {
-    text(s).font(theme::UI_MEDIUM).size(VALUE).color(color)
+    text(s)
+        .font(theme::UI_MEDIUM)
+        .size(VALUE)
+        .color(color)
+        .wrapping(text::Wrapping::None)
+}
+
+pub fn name_cell<'a>(name: &'a str) -> El<'a> {
+    container(small(name)).clip(true).width(Length::Fill).into()
 }
 
 pub fn title<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
@@ -98,31 +109,56 @@ pub fn rule<'a>() -> El<'a> {
         .into()
 }
 
-pub fn stat_row<'a>(name: &'a str, shown: String) -> El<'a> {
-    container(row![small(name).width(Length::Fill), value(shown),].align_y(iced::Alignment::Center))
+pub fn stat_row<'a>(narrow: bool, name: &'a str, shown: String) -> El<'a> {
+    stat_row_colored(narrow, name, shown, theme::TEXT)
+}
+
+pub fn stat_row_colored<'a>(narrow: bool, name: &'a str, shown: String, color: Color) -> El<'a> {
+    if narrow {
+        return column![
+            small(name),
+            container(value_colored(shown, color))
+                .clip(true)
+                .width(Length::Fill)
+                .align_x(iced::alignment::Horizontal::Right),
+        ]
+        .spacing(1)
+        .into();
+    }
+    container(row![name_cell(name), value_colored(shown, color)].align_y(iced::Alignment::Center))
         .height(STAT_ROW)
         .into()
 }
 
-pub fn stat_row_colored<'a>(name: &'a str, shown: String, color: Color) -> El<'a> {
-    container(
-        row![small(name).width(Length::Fill), value_colored(shown, color),]
-            .align_y(iced::Alignment::Center),
-    )
-    .height(STAT_ROW)
-    .into()
+pub fn section<'a>(name: &'a str, headline: Option<String>, body: El<'a>) -> El<'a> {
+    section_colored(name, headline, theme::TEXT, body)
 }
 
-pub fn section<'a>(name: &'a str, headline: Option<String>, body: El<'a>) -> El<'a> {
+pub fn section_colored<'a>(
+    name: &'a str,
+    headline: Option<String>,
+    color: Color,
+    body: El<'a>,
+) -> El<'a> {
     let mut head = row![eyebrow(name).width(Length::Fill)].align_y(iced::Alignment::Center);
     if let Some(h) = headline {
-        head = head.push(value(h));
+        head = head.push(value_colored(h, color));
     }
     container(column![head, body].spacing(GAP))
         .padding([6.0, PAD])
         .width(Length::Fill)
         .style(theme::card)
         .into()
+}
+
+pub fn gauge_text_color(fraction: f32) -> Color {
+    if fraction <= 1.0 {
+        theme::TEXT
+    } else if fraction <= 1.01 {
+        theme::WARNING_TEXT
+    } else {
+        theme::DANGER_TEXT
+    }
 }
 
 pub fn gauge_color(fraction: f32) -> Color {
@@ -160,7 +196,7 @@ pub fn bar<'a>(fraction: f32, fill: Color, height: f32) -> El<'a> {
         .into()
 }
 
-pub fn gauge<'a>(name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
+pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
     let fraction = if total > 0.0 {
         (used / total) as f32
     } else if used > 0.0 {
@@ -169,26 +205,28 @@ pub fn gauge<'a>(name: &'a str, used: f64, total: f64, unit: &'static str) -> El
         0.0
     };
     let color = gauge_color(fraction);
-    let text_color = if fraction > 1.0 {
-        theme::DANGER_TEXT
-    } else {
-        theme::TEXT
-    };
+    let text_color = gauge_text_color(fraction);
     let shown = format!(
         "{} / {} {unit}",
         crate::fmt::num(used, 1),
         crate::fmt::num(total, 1)
     );
-    column![
-        row![
-            small(name).width(Length::Fill),
-            value_colored(shown, text_color),
+    let head: El<'a> = if narrow {
+        column![
+            small(name),
+            container(value_colored(shown, text_color))
+                .clip(true)
+                .width(Length::Fill)
+                .align_x(iced::alignment::Horizontal::Right),
         ]
-        .align_y(iced::Alignment::Center),
-        bar(fraction, color, 4.0),
-    ]
-    .spacing(2)
-    .into()
+        .spacing(1)
+        .into()
+    } else {
+        row![name_cell(name), value_colored(shown, text_color)]
+            .align_y(iced::Alignment::Center)
+            .into()
+    };
+    column![head, bar(fraction, color, 4.0)].spacing(2).into()
 }
 
 pub fn state_glyph<'a>(state: State) -> El<'a> {

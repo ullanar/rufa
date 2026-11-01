@@ -52,7 +52,7 @@ pub const DANGER_TEXT: Color = rgb(0xFF8F8F);
 pub const WARNING_TEXT: Color = rgb(0xF4C77A);
 pub const SUCCESS_TEXT: Color = rgb(0x8FDFA5);
 
-pub const GAUGE_OK: Color = rgb(0x7E8A9B);
+pub const GAUGE_OK: Color = rgb(0x4CBF77);
 pub const GAUGE_WARN: Color = rgb(0xF2B24A);
 pub const GAUGE_HOT: Color = rgb(0xFF7A3D);
 pub const GAUGE_OVER: Color = rgb(0xFF5C5C);

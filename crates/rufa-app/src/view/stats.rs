@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, slider, space, text};
+use iced::widget::{button, column, container, responsive, row, slider, space, text};
 use iced::{Color, Length};
 use rufa_data::Info;
 use rufa_sim::stats::{Layer, Stats};
@@ -14,6 +14,10 @@ pub fn view(app: &App) -> El<'_> {
             .center(Length::Fill)
             .into();
     };
+    responsive(move |size| stats_body(app, doc, size.width < 300.0)).into()
+}
+
+fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     let s = &doc.doc.stats;
     let r = &s.resources;
     let worst = [
@@ -30,35 +34,40 @@ pub fn view(app: &App) -> El<'_> {
         fmt::seconds(cap.depletes_in)
     };
     let mut col = column![
-        ui::section(
+        ui::section_colored(
             "Resources",
             Some(format!("{:.0}%", worst * 100.0)),
-            resources(s)
+            ui::gauge_text_color(worst as f32),
+            resources(s, narrow)
         ),
-        ui::section("Defense", Some(fmt::num(s.defense.ehp, 0)), defense(app, s)),
+        ui::section(
+            "Defense",
+            Some(fmt::num(s.defense.ehp, 0)),
+            defense(app, s, narrow)
+        ),
         ui::section(
             "Offense",
             Some(fmt::num(
                 s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps,
                 1
             )),
-            offense(app, doc, s)
+            offense(app, doc, s, narrow)
         ),
-        ui::section("Capacitor", Some(cap_head), capacitor(doc, s)),
+        ui::section("Capacitor", Some(cap_head), capacitor(doc, s, narrow)),
         ui::section(
             "Navigation",
             Some(format!("{} m/s", fmt::num(s.navigation.max_velocity, 0))),
-            navigation(s)
+            navigation(s, narrow)
         ),
         ui::section(
             "Targeting",
             Some(fmt::distance(s.targeting.max_range)),
-            targeting(s)
+            targeting(s, narrow)
         ),
         ui::section(
             "Price",
             app.fit_price(doc).map(|v| format!("{} ISK", fmt::short(v))),
-            price(app, doc)
+            price(app, doc, narrow)
         ),
     ]
     .spacing(ui::SECTION_GAP);
@@ -79,64 +88,90 @@ pub fn view(app: &App) -> El<'_> {
     .into()
 }
 
-fn resources(s: &Stats) -> El<'_> {
+fn resources(s: &Stats, narrow: bool) -> El<'_> {
     let r = &s.resources;
     column![
-        ui::gauge("CPU", r.cpu_used, r.cpu_total, "tf"),
-        ui::gauge("Powergrid", r.power_used, r.power_total, "MW"),
-        ui::gauge("Calibration", r.calibration_used, r.calibration_total, ""),
+        ui::gauge(narrow, "CPU", r.cpu_used, r.cpu_total, "tf"),
+        ui::gauge(narrow, "Powergrid", r.power_used, r.power_total, "MW"),
         ui::gauge(
+            narrow,
+            "Calibration",
+            r.calibration_used,
+            r.calibration_total,
+            ""
+        ),
+        ui::gauge(
+            narrow,
             "Drone bandwidth",
             r.drone_bandwidth_used,
             r.drone_bandwidth_total,
             "Mbit/s"
         ),
-        ui::gauge("Drone bay", r.drone_bay_used, r.drone_bay_total, "m3"),
+        ui::gauge(
+            narrow,
+            "Drone bay",
+            r.drone_bay_used,
+            r.drone_bay_total,
+            "m3"
+        ),
         ui::stat_row(
+            narrow,
             "Drones active",
             format!("{} / {}", r.drones_active, r.drones_max)
         ),
         ui::stat_row(
+            narrow,
             "Hardpoints free",
             format!("{} turret, {} launcher", r.turrets_free, r.launchers_free)
         ),
-        ui::gauge("Cargo", r.cargo_used, r.cargo_total, "m3"),
+        ui::gauge(narrow, "Cargo", r.cargo_used, r.cargo_total, "m3"),
     ]
     .spacing(3)
     .into()
 }
 
-fn resist_cell<'a>(resonance: f64, color: Color) -> El<'a> {
+fn resist_cell<'a>(resonance: f64, color: Color, narrow: bool) -> El<'a> {
     let resist = (1.0 - resonance).clamp(0.0, 1.0);
+    if narrow {
+        return ui::bar(resist as f32, color, 5.0);
+    }
     column![
         ui::bar(resist as f32, color, 5.0),
-        text(format!("{:.0}%", resist * 100.0))
-            .size(ui::MICRO)
-            .font(theme::UI_MEDIUM)
-            .color(theme::TEXT_SECONDARY)
-            .align_x(iced::alignment::Horizontal::Right)
-            .width(Length::Fill),
+        container(
+            text(format!("{:.0}%", resist * 100.0))
+                .size(ui::MICRO)
+                .font(theme::UI_MEDIUM)
+                .color(color)
+                .wrapping(text::Wrapping::None)
+        )
+        .clip(true)
+        .align_x(iced::alignment::Horizontal::Right)
+        .width(Length::Fill),
     ]
     .spacing(2)
     .width(Length::Fill)
     .into()
 }
 
-fn layer_row<'a>(name: &'static str, l: &Layer) -> El<'a> {
+fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool) -> El<'a> {
     row![
         row![
             text(name)
                 .size(ui::SMALL)
                 .color(theme::TEXT_SECONDARY)
+                .wrapping(text::Wrapping::None)
                 .width(Length::Fill),
-            text(fmt::short(l.hp)).size(ui::MICRO).color(theme::MUTED),
+            text(fmt::short(l.hp))
+                .size(ui::MICRO)
+                .color(theme::MUTED)
+                .wrapping(text::Wrapping::None),
         ]
         .spacing(2)
         .width(72),
-        resist_cell(l.em, theme::EM),
-        resist_cell(l.thermal, theme::THERMAL),
-        resist_cell(l.kinetic, theme::KINETIC),
-        resist_cell(l.explosive, theme::EXPLOSIVE),
+        resist_cell(l.em, theme::EM, narrow),
+        resist_cell(l.thermal, theme::THERMAL, narrow),
+        resist_cell(l.kinetic, theme::KINETIC, narrow),
+        resist_cell(l.explosive, theme::EXPLOSIVE, narrow),
         text(fmt::short(l.ehp))
             .size(ui::SMALL)
             .font(theme::UI_MEDIUM)
@@ -149,7 +184,7 @@ fn layer_row<'a>(name: &'static str, l: &Layer) -> El<'a> {
     .into()
 }
 
-fn defense<'a>(app: &'a App, s: &'a Stats) -> El<'a> {
+fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
     let d = &s.defense;
     let current = app
         .docs
@@ -178,26 +213,32 @@ fn defense<'a>(app: &'a App, s: &'a Stats) -> El<'a> {
     ]
     .spacing(ui::GAP);
     let rep = |name: &'static str, raw: f64, effective: f64| {
-        ui::stat_row(
-            name,
+        let shown = if narrow {
+            format!("{} EHP/s", fmt::num(effective, 1))
+        } else {
             format!(
                 "{} HP/s · {} EHP/s",
                 fmt::num(raw, 1),
                 fmt::num(effective, 1)
-            ),
-        )
+            )
+        };
+        ui::stat_row(narrow, name, shown)
     };
     column![
         presets.wrap(),
         header,
         column![
-            layer_row("Shield", &d.shield),
-            layer_row("Armor", &d.armor),
-            layer_row("Hull", &d.hull),
+            layer_row("Shield", &d.shield, narrow),
+            layer_row("Armor", &d.armor, narrow),
+            layer_row("Hull", &d.hull, narrow),
         ]
         .spacing(6),
         ui::rule(),
-        ui::stat_row("Shield recharge", fmt::seconds(d.shield_recharge_time)),
+        ui::stat_row(
+            narrow,
+            "Shield recharge",
+            fmt::seconds(d.shield_recharge_time)
+        ),
         rep(
             "Passive shield",
             d.passive_shield_rate,
@@ -223,7 +264,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats) -> El<'a> {
     .into()
 }
 
-fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats) -> El<'a> {
+fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     let o = &s.offense;
     let target = app.graph_target();
     let applied = app
@@ -236,11 +277,11 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats) -> El<'a> {
         .map(|p| p.name.as_str())
         .unwrap_or("target");
     column![
-        ui::stat_row("Weapon DPS", fmt::num(o.dps, 1)),
-        ui::stat_row("With reload", fmt::num(o.dps_with_reload, 1)),
-        ui::stat_row("Volley", fmt::num(o.volley, 1)),
-        ui::stat_row("Drone DPS", fmt::num(o.drone_dps, 1)),
-        ui::stat_row("Fighter DPS", fmt::num(o.fighter_dps, 1)),
+        ui::stat_row(narrow, "Weapon DPS", fmt::num(o.dps, 1)),
+        ui::stat_row(narrow, "With reload", fmt::num(o.dps_with_reload, 1)),
+        ui::stat_row(narrow, "Volley", fmt::num(o.volley, 1)),
+        ui::stat_row(narrow, "Drone DPS", fmt::num(o.drone_dps, 1)),
+        ui::stat_row(narrow, "Fighter DPS", fmt::num(o.fighter_dps, 1)),
         ui::rule(),
         container(
             row![
@@ -259,7 +300,7 @@ fn small_owned<'a>(s: String) -> text::Text<'a> {
     text(s).size(ui::SMALL).color(theme::TEXT_SECONDARY)
 }
 
-fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats) -> El<'a> {
+fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     let c = &s.capacitor;
     let sim = &doc.doc.cap;
     let (stability, color) = if c.stable_pct > 0.0 {
@@ -289,56 +330,77 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats) -> El<'a> {
         theme::ACCENT_LINE
     };
     column![
-        ui::stat_row_colored("Stability", stability, color),
+        ui::stat_row_colored(narrow, "Stability", stability, color),
         ui::bar(
             level.max(if sim.depleted_at.is_some() { 0.0 } else { 0.02 }),
             bar_color,
             4.0
         ),
-        ui::stat_row("Simulated", simulated),
-        ui::stat_row("Capacity", format!("{} GJ", fmt::num(c.capacity, 1))),
-        ui::stat_row("Recharge time", fmt::seconds(c.recharge_time)),
+        ui::stat_row_colored(narrow, "Simulated", simulated, bar_color),
         ui::stat_row(
+            narrow,
+            "Capacity",
+            format!("{} GJ", fmt::num(c.capacity, 1))
+        ),
+        ui::stat_row(narrow, "Recharge time", fmt::seconds(c.recharge_time)),
+        ui::stat_row(
+            narrow,
             "Peak recharge",
             format!("{} GJ/s", fmt::num(c.peak_recharge, 2))
         ),
-        ui::stat_row("Peak load", format!("{} GJ/s", fmt::num(c.peak_load, 2))),
-        ui::stat_row("Delta", format!("{} GJ/s", fmt::num(c.peak_delta, 2))),
+        ui::stat_row(
+            narrow,
+            "Peak load",
+            format!("{} GJ/s", fmt::num(c.peak_load, 2))
+        ),
+        ui::stat_row(
+            narrow,
+            "Delta",
+            format!("{} GJ/s", fmt::num(c.peak_delta, 2))
+        ),
     ]
     .spacing(2)
     .into()
 }
 
-fn navigation(s: &Stats) -> El<'_> {
+fn navigation(s: &Stats, narrow: bool) -> El<'_> {
     let n = &s.navigation;
     column![
         ui::stat_row(
+            narrow,
             "Max velocity",
             format!("{} m/s", fmt::num(n.max_velocity, 1))
         ),
-        ui::stat_row("Align time", fmt::seconds(n.align_time)),
+        ui::stat_row(narrow, "Align time", fmt::seconds(n.align_time)),
         ui::stat_row(
+            narrow,
             "Signature radius",
             format!("{} m", fmt::num(n.signature_radius, 1))
         ),
-        ui::stat_row("Warp speed", format!("{} AU/s", fmt::num(n.warp_speed, 2))),
-        ui::stat_row("Mass", format!("{} kg", fmt::short(n.mass))),
-        ui::stat_row("Inertia modifier", fmt::num(n.agility, 3)),
+        ui::stat_row(
+            narrow,
+            "Warp speed",
+            format!("{} AU/s", fmt::num(n.warp_speed, 2))
+        ),
+        ui::stat_row(narrow, "Mass", format!("{} kg", fmt::short(n.mass))),
+        ui::stat_row(narrow, "Inertia modifier", fmt::num(n.agility, 3)),
     ]
     .spacing(2)
     .into()
 }
 
-fn targeting(s: &Stats) -> El<'_> {
+fn targeting(s: &Stats, narrow: bool) -> El<'_> {
     let t = &s.targeting;
     column![
-        ui::stat_row("Max targets", format!("{}", t.max_targets)),
-        ui::stat_row("Targeting range", fmt::distance(t.max_range)),
+        ui::stat_row(narrow, "Max targets", format!("{}", t.max_targets)),
+        ui::stat_row(narrow, "Targeting range", fmt::distance(t.max_range)),
         ui::stat_row(
+            narrow,
             "Scan resolution",
             format!("{} mm", fmt::num(t.scan_resolution, 0))
         ),
         ui::stat_row(
+            narrow,
             "Sensor strength",
             format!("{} {}", fmt::num(t.sensor_strength, 1), t.sensor_type)
         ),
@@ -347,7 +409,7 @@ fn targeting(s: &Stats) -> El<'_> {
     .into()
 }
 
-fn price<'a>(app: &'a App, doc: &'a crate::Doc) -> El<'a> {
+fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     let fit = &doc.doc.fit;
     let isk = |v: Option<f64>| {
         v.map(|v| format!("{} ISK", fmt::short(v)))
@@ -378,10 +440,10 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc) -> El<'a> {
         "Jita sell, cached a day"
     };
     column![
-        ui::stat_row("Hull", isk(hull)),
-        ui::stat_row("Modules and charges", isk(Some(modules))),
-        ui::stat_row("Drones and fighters", isk(Some(drones))),
-        ui::stat_row("Implants and cargo", isk(Some(other))),
+        ui::stat_row(narrow, "Hull", isk(hull)),
+        ui::stat_row(narrow, "Modules and charges", isk(Some(modules))),
+        ui::stat_row(narrow, "Drones and fighters", isk(Some(drones))),
+        ui::stat_row(narrow, "Implants and cargo", isk(Some(other))),
         row![
             text(status)
                 .size(ui::MICRO)
