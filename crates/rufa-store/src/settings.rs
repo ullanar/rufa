@@ -11,6 +11,7 @@ pub struct Settings {
     pub fit_ratio: f32,
     pub esi_client_id: String,
     pub ui_scale: f32,
+    pub skipped_version: String,
 }
 
 impl Default for Settings {
@@ -23,6 +24,7 @@ impl Default for Settings {
             fit_ratio: 0.55,
             esi_client_id: String::new(),
             ui_scale: 1.0,
+            skipped_version: String::new(),
         }
     }
 }
@@ -46,6 +48,7 @@ impl Settings {
                 "fit_ratio" => s.fit_ratio = value.parse().unwrap_or(s.fit_ratio),
                 "esi_client_id" => s.esi_client_id = value.to_string(),
                 "ui_scale" => s.ui_scale = value.parse().unwrap_or(1.0),
+                "skipped_version" => s.skipped_version = value.to_string(),
                 _ => {}
             }
         }
@@ -55,14 +58,15 @@ impl Settings {
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         let text = format!(
-            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\n",
+            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\nskipped_version = {}\n",
             self.skill_level,
             self.factor_reload,
             self.character,
             self.browser_ratio,
             self.fit_ratio,
             self.esi_client_id,
-            self.ui_scale
+            self.ui_scale,
+            self.skipped_version
         );
         std::fs::write(dir.join(FILE), text)
     }
@@ -84,6 +88,7 @@ mod tests {
             fit_ratio: 0.6,
             esi_client_id: "abc".to_string(),
             ui_scale: 1.2,
+            skipped_version: "v0.4.0".to_string(),
         };
         written.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), written);

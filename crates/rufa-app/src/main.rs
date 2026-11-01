@@ -25,6 +25,10 @@ const MIN_FIT: f32 = 300.0;
 const MIN_STATS: f32 = 200.0;
 
 fn main() -> iced::Result {
+    if std::env::var_os(rufa_data::selfupdate::SELF_TEST).is_some() {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        return Ok(());
+    }
     let mut application = iced::application(App::boot, App::update, App::view)
         .title(App::title)
         .theme(theme::of)
@@ -235,6 +239,14 @@ pub enum Message {
     LatestTag(Result<String, String>),
     UpdateSde,
     ToggleViolations,
+    LatestRelease(Result<rufa_data::update::Release, String>),
+    CheckUpdate,
+    UpdateNow,
+    UpdateSwapped(Result<String, String>),
+    UpdateLater,
+    UpdateSkip,
+    ReleaseNotes,
+    Restart,
     ApplyImplantSet(usize),
     EsiClientId(String),
     EsiLogin,
@@ -296,6 +308,12 @@ pub struct App {
     pub prices_pending: bool,
     pub sde_update: Option<String>,
     pub violations_open: bool,
+    pub app_update: Option<rufa_data::update::Release>,
+    pub update_prompt: bool,
+    pub update_checking: bool,
+    pub update_busy: bool,
+    pub update_ready: Option<String>,
+    pub update_error: Option<String>,
     pub implant_sets: Vec<ImplantSet>,
     pub target_name: String,
     pub target_resists: [String; 4],
@@ -306,6 +324,7 @@ pub struct App {
 
 impl App {
     fn boot() -> (App, Task<Message>) {
+        App::sweep_leftovers();
         let data_dir = rufa_data::data_dir();
         let config_dir = rufa_store::config_dir();
         let settings = Settings::load(&config_dir);
@@ -372,6 +391,12 @@ impl App {
             prices_pending: false,
             sde_update: None,
             violations_open: false,
+            app_update: None,
+            update_prompt: false,
+            update_checking: false,
+            update_busy: false,
+            update_ready: None,
+            update_error: None,
             implant_sets: Vec::new(),
             target_name: String::new(),
             target_resists: Default::default(),
@@ -394,7 +419,16 @@ impl App {
             async { rufa_data::update::latest_tag().map_err(|e| e.to_string()) },
             Message::LatestTag,
         );
-        (app, Task::batch([prices, check]))
+        (app, Task::batch([prices, check, release_check()]))
+    }
+
+    fn sweep_leftovers() {
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        if let Some(dir) = exe.parent() {
+            rufa_data::selfupdate::sweep(dir);
+        }
     }
 
     fn open_args(&mut self) {
@@ -1416,6 +1450,94 @@ impl App {
                 }
             }
             Message::ToggleViolations => self.violations_open = !self.violations_open,
+            Message::LatestRelease(result) => {
+                let manual = self.update_checking;
+                self.update_checking = false;
+                match result {
+                    Ok(release) => {
+                        let newer =
+                            rufa_data::update::is_newer(&release.tag, env!("CARGO_PKG_VERSION"));
+                        let skipped = self.settings.skipped_version.trim() == release.tag;
+                        self.app_update = newer.then_some(release);
+                        if manual || (newer && !skipped) {
+                            self.update_prompt = true;
+                        }
+                    }
+                    Err(e) => {
+                        self.status = format!("Update check failed: {e}");
+                        self.update_error = manual.then_some(e);
+                    }
+                }
+            }
+            Message::CheckUpdate => {
+                if self.update_checking || self.update_busy {
+                    return Task::none();
+                }
+                self.update_error = None;
+                self.update_checking = true;
+                self.status = "Checking for updates".to_string();
+                return release_check();
+            }
+            Message::UpdateNow => {
+                let Some(release) = self.app_update.clone() else {
+                    return Task::none();
+                };
+                if self.update_busy {
+                    return Task::none();
+                }
+                self.update_busy = true;
+                self.update_error = None;
+                return Task::perform(
+                    async move {
+                        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                        let tag = release.tag.clone();
+                        rufa_data::selfupdate::update(&release, &exe, |_, _| {})
+                            .map(|_| tag)
+                            .map_err(|e| e.to_string())
+                    },
+                    Message::UpdateSwapped,
+                );
+            }
+            Message::UpdateSwapped(result) => {
+                self.update_busy = false;
+                match result {
+                    Ok(tag) => {
+                        self.status = format!("{tag} is on disk, restart to run it");
+                        self.update_ready = Some(tag);
+                    }
+                    Err(e) => {
+                        self.status = format!("Update failed: {e}");
+                        self.update_error = Some(e);
+                    }
+                }
+            }
+            Message::ReleaseNotes => {
+                let tag = match &self.app_update {
+                    Some(release) => release.tag.clone(),
+                    None => format!("v{}", env!("CARGO_PKG_VERSION")),
+                };
+                let page = rufa_data::update::release_page(rufa_data::update::REPO, &tag);
+                if let Err(e) = rufa_data::open_browser(&page) {
+                    self.status = e;
+                }
+            }
+            Message::UpdateLater => {
+                self.update_prompt = false;
+                self.update_error = None;
+            }
+            Message::UpdateSkip => {
+                if let Some(release) = &self.app_update {
+                    self.settings.skipped_version = release.tag.clone();
+                    let _ = self.settings.save(&self.config_dir);
+                }
+                self.update_prompt = false;
+            }
+            Message::Restart => {
+                if let Ok(exe) = std::env::current_exe() {
+                    let _ = std::process::Command::new(exe).spawn();
+                }
+                return iced::exit();
+            }
             Message::EsiClientId(id) => {
                 self.settings.esi_client_id = id.trim().to_string();
                 let _ = self.settings.save(&self.config_dir);
@@ -1894,6 +2016,15 @@ impl App {
     }
 }
 
+fn release_check() -> Task<Message> {
+    Task::perform(
+        async {
+            rufa_data::update::latest_release(rufa_data::update::REPO).map_err(|e| e.to_string())
+        },
+        Message::LatestRelease,
+    )
+}
+
 fn download_task(data_dir: PathBuf) -> Task<Message> {
     Task::run(
         iced::stream::channel(256, async move |tx| {
@@ -2226,6 +2357,51 @@ mod tests {
             DamagePreset::of(&app.docs[0].doc.fit.environment.damage_profile),
             Some(DamagePreset::Em)
         );
+    }
+
+    fn release(tag: &str) -> rufa_data::update::Release {
+        rufa_data::update::Release {
+            tag: tag.to_string(),
+            published: "2026-11-01".to_string(),
+            notes: String::new(),
+            assets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_newer_release_opens_the_window_and_a_skip_keeps_it_shut() {
+        let Some(mut app) = app() else { return };
+        let _ = app.update(Message::LatestRelease(Ok(release("v99.0.0"))));
+        assert!(app.update_prompt);
+        assert_eq!(
+            app.app_update.as_ref().map(|r| r.tag.as_str()),
+            Some("v99.0.0")
+        );
+
+        let _ = app.update(Message::UpdateSkip);
+        assert!(!app.update_prompt);
+        assert_eq!(app.settings.skipped_version, "v99.0.0");
+
+        let _ = app.update(Message::LatestRelease(Ok(release("v99.0.0"))));
+        assert!(!app.update_prompt, "a skipped tag never opens it again");
+
+        let _ = app.update(Message::LatestRelease(Ok(release("v99.0.1"))));
+        assert!(app.update_prompt, "a different tag opens it");
+        let _ = app.view();
+    }
+
+    #[test]
+    fn an_older_release_stays_quiet_until_the_button_is_pressed() {
+        let Some(mut app) = app() else { return };
+        let _ = app.update(Message::LatestRelease(Ok(release("v0.0.1"))));
+        assert!(!app.update_prompt);
+        assert!(app.app_update.is_none());
+
+        app.update_checking = true;
+        let _ = app.update(Message::LatestRelease(Ok(release("v0.0.1"))));
+        assert!(app.update_prompt, "the manual check always answers");
+        assert!(app.app_update.is_none(), "nothing newer is on offer");
+        let _ = app.view();
     }
 
     #[test]

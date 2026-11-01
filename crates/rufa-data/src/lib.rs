@@ -1,8 +1,10 @@
 pub mod catalog;
+pub mod checksum;
 pub mod esi;
 mod game;
 pub mod icons;
 pub mod price;
+pub mod selfupdate;
 pub mod update;
 
 use std::path::{Path, PathBuf};
@@ -81,4 +83,24 @@ impl Bundle {
     pub fn leak(self) -> (&'static [u8], Option<&'static [u8]>) {
         (Box::leak(self.sde), self.names.map(|b| &*Box::leak(b)))
     }
+}
+
+pub fn open_browser(url: &str) -> Result<(), String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", url]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("cannot open a browser: {e}"))
 }
