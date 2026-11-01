@@ -1,7 +1,6 @@
 use iced::widget::responsive;
 use iced::widget::{
-    button, column, container, image, mouse_area, pick_list, pin, row, space, stack,
-    text, tooltip,
+    button, column, container, image, mouse_area, pick_list, pin, row, space, stack, text, tooltip,
 };
 use iced::{Color, Length};
 use rufa_data::icons::Kind;
@@ -36,14 +35,15 @@ pub fn view(app: &App) -> El<'_> {
         if doc.dirty {
             label = label.push(text("•").size(ui::BODY).color(theme::ACCENT));
         }
-        let close = button(
-            text("×")
-                .size(ui::SMALL)
-                .color(if lit { theme::TEXT } else { theme::FAINT }),
-        )
-        .padding([3, 5])
-        .style(theme::ghost)
-        .on_press(Message::CloseTab(i));
+        let close =
+            button(
+                text("×")
+                    .size(ui::SMALL)
+                    .color(if lit { theme::TEXT } else { theme::FAINT }),
+            )
+            .padding([3, 5])
+            .style(theme::ghost)
+            .on_press(Message::CloseTab(i));
         tabs = tabs.push(
             mouse_area(
                 container(
@@ -188,10 +188,10 @@ fn hull_card<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     };
 
     container(column![head, ui::rule(), summary(app, doc)].spacing(ui::GAP_ROW))
-    .padding(ui::PAD)
-    .width(Length::Fill)
-    .style(theme::card)
-    .into()
+        .padding(ui::PAD)
+        .width(Length::Fill)
+        .style(theme::card)
+        .into()
 }
 
 fn gauge_tile<'a>(name: &'a str, used: f64, total: f64, width: f32) -> El<'a> {
@@ -226,7 +226,10 @@ fn summary<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
     let s = &doc.doc.stats;
     let cap = &s.capacitor;
     let (cap_shown, cap_color) = if cap.stable_pct > 0.0 {
-        (format!("stable {:.0}%", cap.stable_pct), theme::SUCCESS_TEXT)
+        (
+            format!("stable {:.0}%", cap.stable_pct),
+            theme::SUCCESS_TEXT,
+        )
     } else {
         (fmt::seconds(cap.depletes_in), theme::WARNING_TEXT)
     };
@@ -386,7 +389,14 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
             let slot = rack.slot(index);
             match fit.items.iter().position(|it| it.slot == slot) {
                 Some(i) => {
-                    col = col.push(item_row(app, doc, i, rail_color(rack), compact, module_names))
+                    col = col.push(item_row(
+                        app,
+                        doc,
+                        i,
+                        rail_color(rack),
+                        compact,
+                        module_names,
+                    ))
                 }
                 None => {
                     col = col.push(empty_row(
@@ -457,10 +467,7 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> O
     }
     let mut col = column![drone_header(load, compact)].spacing(1);
     if types.is_empty() {
-        col = col.push(empty_row(
-            "Drone bay".to_string(),
-            theme::RAIL_SERVICE,
-        ));
+        col = col.push(empty_row("Drone bay".to_string(), theme::RAIL_SERVICE));
     }
     for type_id in types {
         let room = drones::room(&game.info(), &ids, &doc.doc.calc, type_id);
@@ -592,16 +599,15 @@ fn drone_row<'a>(
         .map(|i| item_info(app, doc, *i))
         .unwrap_or_default();
 
-
     let mut line = row![
         container(space().width(3).height(14)).style(theme::rounded(rail, 1.5)),
         icon,
         container(
             text(ui::clip(app.type_name(type_id), names))
-            .size(ui::BODY)
-            .font(theme::UI_MEDIUM)
-            .color(theme::TEXT)
-            .wrapping(text::Wrapping::None)
+                .size(ui::BODY)
+                .font(theme::UI_MEDIUM)
+                .color(theme::TEXT)
+                .wrapping(text::Wrapping::None)
         )
         .clip(true)
         .width(Length::Fill),
@@ -820,11 +826,9 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         col = col.push(
             container(
                 row![
-                    container(
-                        ui::body(app.projection_label(p)).wrapping(text::Wrapping::None)
-                    )
-                    .clip(true)
-                    .width(Length::Fill),
+                    container(ui::body(app.projection_label(p)).wrapping(text::Wrapping::None))
+                        .clip(true)
+                        .width(Length::Fill),
                     button(text("×").size(ui::SMALL))
                         .padding([2, 5])
                         .style(theme::ghost)

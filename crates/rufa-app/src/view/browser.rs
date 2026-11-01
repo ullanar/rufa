@@ -121,7 +121,11 @@ fn ships(app: &App) -> El<'_> {
     }
 
     column![
-        search("Search hulls and groups", &app.ship_search, Message::ShipSearch),
+        search(
+            "Search hulls and groups",
+            &app.ship_search,
+            Message::ShipSearch
+        ),
         ui::scroll(list).height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
@@ -185,14 +189,14 @@ fn fits(app: &App) -> El<'_> {
                 continue;
             }
             for (hull, fits) in hulls {
-                list = list.push(
-                    container(ui::eyebrow(app.type_name(hull))).padding(iced::Padding {
+                list = list.push(container(ui::eyebrow(app.type_name(hull))).padding(
+                    iced::Padding {
                         top: 3.0,
                         right: 2.0,
                         bottom: 1.0,
                         left: 10.0,
-                    }),
-                );
+                    },
+                ));
                 for fit in fits {
                     list = list.push(fit_row(fit, open(fit), None, 14.0));
                 }
