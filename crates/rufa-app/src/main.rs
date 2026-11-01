@@ -219,6 +219,7 @@ pub enum Message {
     PickForRack(Option<rufa_sim::place::Rack>),
     ToggleStatSection(&'static str),
     HoverSaved(Option<PathBuf>),
+    ShowEhp(bool),
     DuplicateSaved(PathBuf),
     ProjectItem(i32),
     ProjectFit(usize),
@@ -351,6 +352,7 @@ pub struct App {
     pub market_rack: Option<rufa_sim::place::Rack>,
     pub stats_folded: std::collections::BTreeSet<&'static str>,
     pub hovered_saved: Option<PathBuf>,
+    pub show_ehp: bool,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
     pub graph_signature: String,
@@ -443,6 +445,7 @@ impl App {
             market_rack: None,
             stats_folded: std::collections::BTreeSet::new(),
             hovered_saved: None,
+            show_ehp: true,
             center: CenterTab::Fit,
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
@@ -981,6 +984,7 @@ impl App {
             }
             Message::QuantityDone => self.quantity_edit = None,
             Message::HoverSaved(path) => self.hovered_saved = path,
+            Message::ShowEhp(on) => self.show_ehp = on,
             Message::ToggleStatSection(name) => {
                 if !self.stats_folded.remove(name) {
                     self.stats_folded.insert(name);
