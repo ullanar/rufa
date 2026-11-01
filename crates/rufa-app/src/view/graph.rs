@@ -15,21 +15,16 @@ pub fn view(app: &App) -> Element<'_, Message> {
         return text("No game data").into();
     };
     let kind = |label: &'static str, which: GraphKind| {
-        let style = if app.graph_kind == which {
-            button::primary
-        } else {
-            button::secondary
-        };
-        button(text(label).size(11))
+        button(text(label).size(ui::SMALL))
             .padding([2, 8])
-            .style(style)
+            .style(theme::chip(app.graph_kind == which))
             .on_press(Message::GraphKind(which))
     };
     let kinds = row![
         kind("DPS over distance", GraphKind::DpsOverDistance),
         kind("Capacitor over time", GraphKind::CapOverTime),
     ]
-    .spacing(4);
+    .spacing(ui::GAP);
     if app.graph_kind == GraphKind::CapOverTime {
         return cap_view(app, kinds.into());
     }
@@ -71,68 +66,78 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .spacing(3)
         .align_y(iced::Alignment::Center);
     for (i, p) in app.targets.iter().enumerate() {
-        let style = if app.target == i {
-            button::primary
-        } else {
-            button::secondary
-        };
         profiles = profiles.push(
-            button(text(&p.name).size(10))
-                .padding([1, 5])
-                .style(style)
+            button(text(&p.name).size(ui::MICRO))
+                .padding([1, 6])
+                .style(theme::chip(app.target == i))
                 .on_press(Message::TargetProfile(i)),
         );
         if !builtin.iter().any(|b| b.name == p.name) {
             profiles = profiles.push(
-                button(text("x").size(10))
-                    .padding([1, 3])
-                    .style(button::text)
+                button(text("\u{00d7}").size(ui::MICRO))
+                    .padding([1, 4])
+                    .style(theme::ghost)
                     .on_press(Message::DeleteTargetProfile(i)),
             );
         }
     }
     let mut editor = row![
-        text("New profile").size(11).style(text::secondary),
+        ui::label("NEW PROFILE"),
         text_input("name", &app.target_name)
             .on_input(Message::TargetName)
-            .size(11)
-            .padding(3)
-            .width(120),
+            .size(ui::SMALL)
+            .padding([3, 6])
+            .width(120)
+            .style(theme::input),
     ]
-    .spacing(4)
+    .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     for (i, label) in ["EM", "Th", "Kin", "Exp"].iter().enumerate() {
-        editor = editor.push(ui::label(*label));
         editor = editor.push(
-            text_input("0%", &app.target_resists[i])
-                .on_input(move |s| Message::TargetResist(i, s))
-                .size(ui::SMALL)
-                .padding([3, 6])
-                .width(46)
-                .style(theme::input),
+            row![
+                ui::label(*label),
+                text_input("0%", &app.target_resists[i])
+                    .on_input(move |s| Message::TargetResist(i, s))
+                    .size(ui::SMALL)
+                    .padding([3, 6])
+                    .width(46)
+                    .style(theme::input),
+            ]
+            .spacing(ui::GAP_ROW)
+            .align_y(iced::Alignment::Center),
         );
     }
     editor = editor.push(
-        button(text("save").size(10))
-            .padding([2, 6])
-            .style(button::success)
+        button(text("Save").size(ui::SMALL))
+            .padding([3, 10])
+            .style(theme::secondary)
             .on_press(Message::SaveTargetProfile),
     );
     let controls = row![
-        text("Signature, m").size(11).style(text::secondary),
-        text_input("inf", &app.graph_signature)
-            .on_input(Message::GraphSignature)
-            .size(11)
-            .padding(3)
-            .width(70),
-        text("velocity, m/s").size(11).style(text::secondary),
-        text_input("0", &app.graph_velocity)
-            .on_input(Message::GraphVelocity)
-            .size(11)
-            .padding(3)
-            .width(70),
+        row![
+            ui::label("SIGNATURE, M"),
+            text_input("inf", &app.graph_signature)
+                .on_input(Message::GraphSignature)
+                .size(ui::SMALL)
+                .padding([3, 6])
+                .width(70)
+                .style(theme::input),
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
+        row![
+            ui::label("VELOCITY, M/S"),
+            text_input("0", &app.graph_velocity)
+                .on_input(Message::GraphVelocity)
+                .size(ui::SMALL)
+                .padding([3, 6])
+                .width(70)
+                .style(theme::input),
+        ]
+        .spacing(ui::GAP_ROW)
+        .align_y(iced::Alignment::Center),
     ]
-    .spacing(6)
+    .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
 
     let max_y = series
@@ -152,12 +157,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
     column![
         kinds,
         profiles.wrap(),
-        controls,
+        controls.wrap(),
         editor.wrap(),
         legend,
         plot
     ]
-    .spacing(6)
+    .spacing(ui::GAP_ROW)
     .height(Length::Fill)
     .into()
 }
