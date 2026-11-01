@@ -159,8 +159,13 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
     }
     col = col.push(ui::stat_row(
         narrow,
-        "Hardpoints free",
-        format!("{} turret, {} launcher", r.turrets_free, r.launchers_free),
+        "Turret slots free",
+        r.turrets_free.to_string(),
+    ));
+    col = col.push(ui::stat_row(
+        narrow,
+        "Launcher slots free",
+        r.launchers_free.to_string(),
     ));
     col = col.push(ui::gauge(
         narrow,
@@ -447,24 +452,33 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         space().height(0).into()
     };
     let mut col = column![].spacing(2);
+    // The name says what shoots, the value says how much and in what.
     if o.dps > 0.0 {
         let shown = if o.dps_spooled > o.dps + 0.05 {
-            format!("{} - {}", fmt::num(o.dps, 1), fmt::num(o.dps_spooled, 1))
+            format!(
+                "{} - {} dps",
+                fmt::num(o.dps, 1),
+                fmt::num(o.dps_spooled, 1)
+            )
         } else {
-            fmt::num(o.dps, 1)
+            format!("{} dps", fmt::num(o.dps, 1))
         };
-        col = col.push(ui::stat_row(narrow, "Weapon DPS", shown));
+        col = col.push(ui::stat_row(narrow, "Guns", shown));
     }
-    for (name, value) in [
-        ("With reload", o.dps_with_reload),
-        ("Volley", o.volley),
-        ("Drone DPS", o.drone_dps),
-        ("Fighter DPS", o.fighter_dps),
+    for (name, value, unit) in [
+        ("Guns with reload", o.dps_with_reload, "dps"),
+        ("Volley", o.volley, "damage"),
+        ("Drones", o.drone_dps, "dps"),
+        ("Fighters", o.fighter_dps, "dps"),
     ] {
         if value <= 0.0 {
             continue;
         }
-        col = col.push(ui::stat_row(narrow, name, fmt::num(value, 1)));
+        col = col.push(ui::stat_row(
+            narrow,
+            name,
+            format!("{} {unit}", fmt::num(value, 1)),
+        ));
     }
     col = col.push(split);
     col = col.push(ui::rule());
@@ -472,7 +486,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         container(
             row![
                 small_owned(format!("Applied vs {target_name}")).width(Length::Fill),
-                ui::value(fmt::num(applied, 1))
+                ui::value(format!("{} dps", fmt::num(applied, 1)))
             ]
             .align_y(iced::Alignment::Center),
         )
@@ -706,6 +720,7 @@ fn navigation(s: &Stats, narrow: bool) -> El<'_> {
 fn targeting(s: &Stats, narrow: bool) -> El<'_> {
     let t = &s.targeting;
     let mut col = column![
+        ui::stat_row(narrow, "Sensor", t.sensor_type.to_string()),
         ui::stat_row(narrow, "Max targets", format!("{}", t.max_targets)),
         ui::stat_row(narrow, "Targeting range", fmt::distance(t.max_range)),
         ui::stat_row(
@@ -716,7 +731,7 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
         ui::stat_row(
             narrow,
             "Sensor strength",
-            format!("{} {}", fmt::num(t.sensor_strength, 1), t.sensor_type)
+            format!("{} points", fmt::num(t.sensor_strength, 1))
         ),
     ]
     .spacing(2);
@@ -731,7 +746,7 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
         col = col.push(ui::stat_row_colored(
             narrow,
             "Chance to be jammed",
-            format!("{} %", fmt::num(t.jam_chance, 1)),
+            format!("{}%", fmt::num(t.jam_chance, 1)),
             theme::DANGER_TEXT,
         ));
     }
@@ -776,8 +791,8 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     };
     column![
         ui::stat_row(narrow, "Hull", isk(hull)),
-        ui::stat_row(narrow, "Modules and charges", isk(Some(modules))),
-        ui::stat_row(narrow, "Drones and fighters", isk(Some(drones))),
+        ui::stat_row(narrow, "Modules", isk(Some(modules))),
+        ui::stat_row(narrow, "Drones", isk(Some(drones))),
         ui::stat_row(narrow, "Cargo", isk(Some(cargo))),
         ui::rule(),
         ui::stat_row(narrow, "In the head", isk(Some(head))),
