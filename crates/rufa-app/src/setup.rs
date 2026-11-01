@@ -155,8 +155,117 @@ pub fn install(from: &Path, dir: &Path, config_dir: &Path) -> io::Result<PathBuf
     {
         write_desktop_entry(&share, &target)?;
     }
+    register_with_windows(&target)?;
     record(config_dir, &target)?;
     Ok(target)
+}
+
+#[cfg(windows)]
+const DISPLAY_NAME: &str = "Rufa";
+
+/// Put Rufa where the Start Menu search finds it, record it in the installed
+/// programs list, and add its directory to the user's Path.
+#[cfg(windows)]
+fn register_with_windows(exe: &Path) -> io::Result<()> {
+    start_menu_shortcut(exe)?;
+    extend_user_path(exe)
+}
+
+#[cfg(not(windows))]
+fn register_with_windows(_exe: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn start_menu_programs() -> Option<PathBuf> {
+    let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
+    Some(base.join(r"Microsoft\Windows\Start Menu\Programs"))
+}
+
+#[cfg(windows)]
+fn start_menu_shortcut(exe: &Path) -> io::Result<()> {
+    let Some(programs) = start_menu_programs() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(&programs)?;
+    let mut link = mslnk::ShellLink::new(exe).map_err(io::Error::other)?;
+    link.set_name(Some(DISPLAY_NAME.to_string()));
+    if let Some(dir) = exe.parent() {
+        link.set_working_dir(Some(dir.to_string_lossy().to_string()));
+    }
+    link.set_icon_location(Some(exe.to_string_lossy().to_string()));
+    link.create_lnk(programs.join(format!("{DISPLAY_NAME}.lnk")))
+        .map_err(io::Error::other)
+}
+
+/// The install directory joins the user's Path, once. A running shell keeps
+/// its old copy, so the change reaches programs started after the broadcast.
+#[cfg(windows)]
+fn extend_user_path(exe: &Path) -> io::Result<()> {
+    let Some(dir) = exe.parent() else {
+        return Ok(());
+    };
+    let dir = dir.to_string_lossy().to_string();
+    let key = windows_registry::CURRENT_USER
+        .create("Environment")
+        .map_err(io::Error::other)?;
+    let current = key.get_string("Path").unwrap_or_default();
+    if path_contains(&current, &dir) {
+        return Ok(());
+    }
+    let joined = if current.trim().is_empty() {
+        dir
+    } else {
+        format!("{};{dir}", current.trim_end_matches(';'))
+    };
+    key.set_expand_string("Path", joined)
+        .map_err(io::Error::other)?;
+    broadcast_environment_change();
+    Ok(())
+}
+
+/// Whether a `;` separated Path already names this directory. Windows compares
+/// paths without case, and a trailing separator means nothing.
+#[cfg(any(windows, test))]
+fn path_contains(path: &str, dir: &str) -> bool {
+    path.split(';')
+        .map(|part| part.trim().trim_end_matches('\\'))
+        .any(|part| part.eq_ignore_ascii_case(dir.trim_end_matches('\\')))
+}
+
+#[cfg(windows)]
+fn broadcast_environment_change() {
+    use std::os::windows::ffi::OsStrExt;
+    unsafe extern "system" {
+        fn SendMessageTimeoutW(
+            hwnd: isize,
+            msg: u32,
+            wparam: usize,
+            lparam: *const u16,
+            flags: u32,
+            timeout: u32,
+            result: *mut usize,
+        ) -> isize;
+    }
+    const HWND_BROADCAST: isize = 0xffff;
+    const WM_SETTINGCHANGE: u32 = 0x001a;
+    const SMTO_ABORTIFHUNG: u32 = 0x0002;
+    let name: Vec<u16> = std::ffi::OsStr::new("Environment")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut result = 0usize;
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            name.as_ptr(),
+            SMTO_ABORTIFHUNG,
+            5000,
+            &mut result,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +277,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_directory_already_on_the_path_is_added_no_second_time() {
+        let path = r"C:\Windows;C:\Users\pilot\AppData\Local\Programs\rufa";
+        assert!(path_contains(
+            path,
+            r"C:\Users\pilot\AppData\Local\Programs\rufa"
+        ));
+        assert!(path_contains(
+            path,
+            r"c:\users\pilot\appdata\local\programs\rufa"
+        ));
+        assert!(path_contains(
+            path,
+            r"C:\Users\pilot\AppData\Local\Programs\rufa\"
+        ));
+        assert!(path_contains(r"C:\Windows\;C:\x", r"C:\Windows"));
+        assert!(!path_contains(path, r"C:\Program Files\rufa"));
+        assert!(!path_contains("", r"C:\x"));
     }
 
     #[test]

@@ -15,5 +15,9 @@ rufa-data.workspace = true
 rufa-sim.workspace = true
 rufa-store.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-registry.workspace = true
+mslnk.workspace = true
+
 [build-dependencies]
 winresource.workspace = true
