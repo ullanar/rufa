@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod fmt;
 mod theme;
 mod ui;
@@ -173,6 +175,8 @@ pub enum Message {
     SetMode(Option<i32>),
     ReplaceItem(usize, i32),
     DeleteSaved(PathBuf),
+    ImportPyfa,
+    PyfaImported(Result<(usize, usize, usize), String>),
     Mutate(usize, i32),
     MutationValue(usize, i32, f64),
     RevertMutation(usize),
@@ -773,6 +777,60 @@ impl App {
                     self.edit_active(|fit, _| edit::toggle_ability(fit, &game.info(), i, effect));
                 }
             }
+            Message::ImportPyfa => {
+                let Some((game, ids)) = self.ready() else {
+                    return Task::none();
+                };
+                let Some(db) = rufa_store::pyfa::locate() else {
+                    let shown = rufa_store::pyfa::candidate_paths()
+                        .first()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default();
+                    self.status = format!(
+                        "Pyfa database not found, looked at {shown}. Set RUFA_PYFA_DB to its path."
+                    );
+                    return Task::none();
+                };
+                let config = self.config_dir.clone();
+                self.status = format!("Importing fits from {}", db.display());
+                return Task::perform(
+                    async move {
+                        let report = rufa_store::pyfa::read(&db, &game.info(), &ids)
+                            .map_err(|e| e.to_string())?;
+                        let mut saved = 0;
+                        let mut unmatched = 0;
+                        for imported in &report.fits {
+                            let hull = game.type_name(imported.fit.ship.type_id).to_string();
+                            if rufa_store::save_fit(
+                                &game.info(),
+                                &config,
+                                &imported.fit,
+                                None,
+                                &hull,
+                            )
+                            .is_ok()
+                            {
+                                saved += 1;
+                            }
+                            unmatched += imported.unknown_types;
+                        }
+                        Ok((saved, report.skipped, unmatched))
+                    },
+                    Message::PyfaImported,
+                );
+            }
+            Message::PyfaImported(result) => match result {
+                Ok((saved, skipped, unmatched)) => {
+                    self.status = format!(
+                        "Imported {saved} fits from Pyfa, {skipped} skipped, {unmatched} items not matched to a type"
+                    );
+                    if let Some((game, _)) = self.ready() {
+                        self.saved = rufa_store::saved_fits(&game.info(), &self.config_dir)
+                            .unwrap_or_default();
+                    }
+                }
+                Err(e) => self.status = format!("Pyfa import failed: {e}"),
+            },
             Message::DeleteSaved(path) => {
                 if let Some((game, _)) = self.ready() {
                     match std::fs::remove_file(&path) {
@@ -2120,6 +2178,33 @@ mod tests {
         let _ = app.update(Message::OpenMenu(1));
         let _ = app.update(Message::MenuRemoveSimilar);
         assert_eq!(app.docs[0].doc.fit.items.len(), 0);
+    }
+
+    #[test]
+    fn pyfa_import_saves_every_readable_fit() {
+        let Some(mut app) = app() else { return };
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../rufa-store/tests/fixtures/pyfa-saveddata.db");
+        // The locate step reads the environment, so point it at the fixture.
+        unsafe { std::env::set_var("RUFA_PYFA_DB", &fixture) };
+        let _ = app.update(Message::ImportPyfa);
+        assert!(app.status.starts_with("Importing"), "{}", app.status);
+        let game: &'static Game = app.game.as_ref().unwrap();
+        let ids = app.ids.unwrap();
+        let report = rufa_store::pyfa::read(&fixture, &game.info(), &ids).unwrap();
+        let mut saved = 0;
+        for imported in &report.fits {
+            let hull = game.type_name(imported.fit.ship.type_id).to_string();
+            rufa_store::save_fit(&game.info(), &app.config_dir, &imported.fit, None, &hull)
+                .unwrap();
+            saved += 1;
+        }
+        let _ = app.update(Message::PyfaImported(Ok((saved, report.skipped, 1))));
+        assert_eq!(app.saved.len(), 2, "{}", app.status);
+        assert!(app.saved.iter().any(|f| f.name == "Pyfa Rifter"));
+        let _ = app.update(Message::OpenSaved(app.saved[0].path.clone()));
+        assert!(app.docs[0].doc.stats.offense.dps > 0.0);
+        let _ = std::fs::remove_dir_all(&app.config_dir);
     }
 
     #[test]

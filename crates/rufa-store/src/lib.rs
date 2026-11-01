@@ -1,7 +1,9 @@
 mod character;
 pub mod implants;
 mod prices;
+pub mod pyfa;
 mod settings;
+pub mod sqlite;
 pub mod targets;
 
 use std::path::{Path, PathBuf};
@@ -22,13 +24,25 @@ pub fn config_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("RUFA_CONFIG_DIR") {
         return PathBuf::from(dir);
     }
+    if cfg!(target_os = "windows") {
+        if let Some(dir) = std::env::var_os("APPDATA") {
+            return PathBuf::from(dir).join("rufa");
+        }
+        return rufa_data::home_dir()
+            .join("AppData")
+            .join("Roaming")
+            .join("rufa");
+    }
+    if cfg!(target_os = "macos") {
+        return rufa_data::home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("rufa");
+    }
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
         return PathBuf::from(dir).join("rufa");
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    home.join(".config").join("rufa")
+    rufa_data::home_dir().join(".config").join("rufa")
 }
 
 pub fn fits_dir(config: &Path) -> PathBuf {

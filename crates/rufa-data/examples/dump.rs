@@ -80,6 +80,15 @@ fn main() {
                 );
             }
         }
+        "id" => {
+            let sde = rufa_data::Sde::new(bytes).unwrap();
+            let name: Vec<String> = std::env::args().skip(2).collect();
+            let name = name.join(" ");
+            match sde.type_name_to_id(&name) {
+                Some(id) => println!("{id}\t{name}"),
+                None => println!("not found: {name}"),
+            }
+        }
         "group" => {
             let id: i32 = std::env::args().nth(2).unwrap().parse().unwrap();
             for g in raw.groups().into_iter().flatten().filter(|g| g.id() == id) {

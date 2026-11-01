@@ -110,7 +110,17 @@ fn ships(app: &App) -> El<'_> {
         }
     }
 
-    let mut saved = column![ui::eyebrow("Saved fits")].spacing(1);
+    let mut saved = column![
+        row![
+            ui::eyebrow("Saved fits").width(Length::Fill),
+            button(text("Import from Pyfa").size(ui::SMALL))
+                .padding([2, 8])
+                .style(theme::secondary)
+                .on_press(Message::ImportPyfa),
+        ]
+        .align_y(iced::Alignment::Center)
+    ]
+    .spacing(1);
     if app.saved.is_empty() {
         saved = saved.push(
             text("None yet. Ctrl+S saves the open fit.")
