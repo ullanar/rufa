@@ -2004,7 +2004,11 @@ mod tests {
         let hobgoblin = type_id(&app, "Hobgoblin II");
         let hammerhead = type_id(&app, "Hammerhead II");
         let ogre = type_id(&app, "Ogre II");
-        assert_eq!(drones::stack(fit, ogre).launched, 1, "the ogre hits hardest");
+        assert_eq!(
+            drones::stack(fit, ogre).launched,
+            1,
+            "the ogre hits hardest"
+        );
         assert_eq!(drones::stack(fit, hammerhead).launched, 4);
         assert_eq!(drones::stack(fit, hobgoblin).launched, 0);
         let r = &app.docs[0].doc.stats.resources;
@@ -2046,12 +2050,35 @@ mod tests {
     }
 
     #[test]
+    fn bombs_to_kill_follow_the_resonance_of_each_layer() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Drake Navy Issue, bare]\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        let d = &app.docs[0].doc.stats.defense;
+        assert!(
+            d.bombs.iter().all(|count| *count > 1.0 && *count < 100.0),
+            "{:?}",
+            d.bombs
+        );
+        assert!(
+            d.bombs[0] < d.bombs[3],
+            "a Caldari shield has no EM resist: {:?}",
+            d.bombs
+        );
+        let _ = app.view();
+    }
+
+    #[test]
     fn a_miner_reports_ore_per_second_and_damage_splits_by_type() {
         let Some(mut app) = app() else { return };
         let eft = "[Venture, mining]\n\nMiner II\nMiner II\n\nMining Drone II x2\n";
         let _ = app.update(Message::ImportText(Some(eft.to_string())));
         let s = &app.docs[0].doc.stats;
-        assert!(s.mining.miner > 0.0 && s.mining.drone > 0.0, "{:?}", s.mining);
+        assert!(
+            s.mining.miner > 0.0 && s.mining.drone > 0.0,
+            "{:?}",
+            s.mining
+        );
         assert!((s.mining.per_hour() - s.mining.total() * 3600.0).abs() < 1e-6);
         assert!(s.resources.holds.iter().any(|size| *size > 0.0), "ore hold");
 
@@ -2064,7 +2091,11 @@ mod tests {
         let o = &app.docs[1].doc.stats.offense;
         let split: f64 = o.damage.iter().sum();
         assert!((split - o.dps).abs() < 0.01, "{:?} vs {}", o.damage, o.dps);
-        assert!(o.damage[0] > o.damage[2], "EMP is mostly EM: {:?}", o.damage);
+        assert!(
+            o.damage[0] > o.damage[2],
+            "EMP is mostly EM: {:?}",
+            o.damage
+        );
         let t = &app.docs[1].doc.stats.targeting;
         assert!(t.lock_times[2] > 0.0 && t.lock_times[6] < t.lock_times[2]);
         assert!(app.docs[1].doc.stats.navigation.max_warp_distance > 0.0);
@@ -2081,43 +2112,84 @@ mod tests {
 
         let _ = app.update(Message::AddItem(hobgoblin));
         let stack = drones::stack(&app.docs[0].doc.fit, hobgoblin);
-        assert_eq!(stack, drones::Stack { launched: 5, stowed: 0 });
+        assert_eq!(
+            stack,
+            drones::Stack {
+                launched: 5,
+                stowed: 0
+            }
+        );
         let r = &app.docs[0].doc.stats.resources;
         assert_eq!((r.drones_active, r.drones_max), (5.0, 5.0));
-        assert_eq!((r.drone_bandwidth_used, r.drone_bandwidth_total), (25.0, 75.0));
+        assert_eq!(
+            (r.drone_bandwidth_used, r.drone_bandwidth_total),
+            (25.0, 75.0)
+        );
         assert_eq!((r.drone_bay_used, r.drone_bay_total), (25.0, 125.0));
-        assert!(app.docs[0].doc.calc.violations.as_deref().unwrap_or(&[]).is_empty());
+        assert!(
+            app.docs[0]
+                .doc
+                .calc
+                .violations
+                .as_deref()
+                .unwrap_or(&[])
+                .is_empty()
+        );
 
         let _ = app.update(Message::AddItem(hobgoblin));
         assert_eq!(
             drones::stack(&app.docs[0].doc.fit, hobgoblin),
-            drones::Stack { launched: 5, stowed: 1 }
+            drones::Stack {
+                launched: 5,
+                stowed: 1
+            }
         );
 
         let _ = app.update(Message::DroneLaunched(hobgoblin, 3));
         assert_eq!(
             drones::stack(&app.docs[0].doc.fit, hobgoblin),
-            drones::Stack { launched: 3, stowed: 3 }
+            drones::Stack {
+                launched: 3,
+                stowed: 3
+            }
         );
 
         let _ = app.update(Message::AddItem(hammerhead));
         assert_eq!(
             drones::stack(&app.docs[0].doc.fit, hammerhead),
-            drones::Stack { launched: 2, stowed: 0 }
+            drones::Stack {
+                launched: 2,
+                stowed: 0
+            }
         );
         assert_eq!(app.docs[0].doc.stats.resources.drones_active, 5.0);
-        assert!(app.docs[0].doc.calc.violations.as_deref().unwrap_or(&[]).is_empty());
+        assert!(
+            app.docs[0]
+                .doc
+                .calc
+                .violations
+                .as_deref()
+                .unwrap_or(&[])
+                .is_empty()
+        );
 
         let _ = app.update(Message::DroneLaunched(hammerhead, 5));
         assert_eq!(
             drones::stack(&app.docs[0].doc.fit, hammerhead),
-            drones::Stack { launched: 2, stowed: 0 },
+            drones::Stack {
+                launched: 2,
+                stowed: 0
+            },
             "the pilot cap stops the launch"
         );
 
         let _ = app.update(Message::DroneCarried(hobgoblin, 40));
         let stack = drones::stack(&app.docs[0].doc.fit, hobgoblin);
-        assert_eq!(stack.total(), 21, "the bay holds 125 m3 less two hammerheads");
+        assert_eq!(
+            stack.total(),
+            21,
+            "the bay holds 125 m3 less two hammerheads"
+        );
         assert_eq!(stack.launched, 3);
 
         let _ = app.update(Message::DroneCarried(hobgoblin, 0));
@@ -2589,12 +2661,18 @@ mod tests {
             (0..4).all(|i| fit.items[i].charge.as_ref().map(|c| c.type_id) == Some(navy)),
             "every selected launcher takes the charge"
         );
-        assert!(fit.items[4].charge.is_none(), "the extender takes no rocket");
+        assert!(
+            fit.items[4].charge.is_none(),
+            "the extender takes no rocket"
+        );
 
         let _ = app.update(Message::ReplaceItem(0, launcher_t1));
         let fit = &app.docs[0].doc.fit;
         assert!((0..4).all(|i| fit.items[i].type_id == launcher_t1));
-        assert_eq!(fit.items[4].type_id, extender, "a swap stays within the kind");
+        assert_eq!(
+            fit.items[4].type_id, extender,
+            "a swap stays within the kind"
+        );
 
         let _ = app.update(Message::SelectItem(Some(2)));
         let _ = app.update(Message::AddItem(plain));
@@ -2734,4 +2812,3 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
-
