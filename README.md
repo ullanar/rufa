@@ -8,13 +8,30 @@ The attribute math is [dogma-engine](https://github.com/EVEShipFit/dogma-engine)
 
 ## Run
 
+Download a build from [Releases](https://github.com/ullanar/rufa/releases) and start it. There is nothing else to install.
+
+- Linux: `rufa-*-x86_64-unknown-linux-gnu`, built against glibc 2.28, so it runs on anything newer.
+- Windows: `rufa-*-x86_64-pc-windows-msvc.exe`.
+- macOS: `rufa-*-aarch64-apple-darwin` on Apple silicon, `rufa-*-x86_64-apple-darwin` on Intel.
+
+Every target also ships as a `.zip`. On Linux and macOS mark the file executable once:
+
+```
+chmod +x rufa-*
+```
+
+The first start downloads the game data from the latest [sde-patched](https://github.com/EVEShipFit/sde-patched) release. Pass a fit file to open it straight away:
+
+```
+rufa my-fit.eft
+```
+
+### From source
+
+Rust nightly, then:
+
 ```
 cargo run --release
-```
-
-The first start downloads the game data from the latest [sde-patched](https://github.com/EVEShipFit/sde-patched) release. Drop a fit file on the command line to open it:
-
-```
 cargo run --release -- my-fit.eft
 ```
 
