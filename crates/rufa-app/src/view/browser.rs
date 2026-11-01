@@ -394,7 +394,7 @@ fn market(app: &App) -> El<'_> {
             .on_press(Message::AddTo(target))
     };
     let mut modes = row![
-        ui::label("CLICK ADDS TO"),
+        ui::label("ADD TO"),
         mode("fit", AddTo::Fit),
         mode("cargo", AddTo::Cargo),
         mode("projected", AddTo::Projected),
