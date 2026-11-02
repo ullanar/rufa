@@ -378,6 +378,7 @@ pub struct App {
     pub target_name: String,
     pub target_resists: [String; 4],
     pub esi_pending: bool,
+    pub pyfa_pending: bool,
     pub icons: std::collections::HashMap<(Kind, i32), image::Handle>,
     pub icons_pending: std::collections::HashSet<(Kind, i32)>,
 }
@@ -471,6 +472,7 @@ impl App {
             target_name: String::new(),
             target_resists: Default::default(),
             esi_pending: false,
+            pyfa_pending: false,
             icons: Default::default(),
             icons_pending: Default::default(),
         };
@@ -1075,6 +1077,9 @@ impl App {
                 let Some((game, ids)) = self.ready() else {
                     return Task::none();
                 };
+                if self.pyfa_pending {
+                    return Task::none();
+                }
                 let Some(db) = rufa_store::pyfa::locate() else {
                     let shown = rufa_store::pyfa::candidate_paths()
                         .first()
@@ -1086,6 +1091,7 @@ impl App {
                     return Task::none();
                 };
                 let config = self.config_dir.clone();
+                self.pyfa_pending = true;
                 self.status = format!("Importing fits from {}", db.display());
                 return Task::perform(
                     async move {
@@ -1113,18 +1119,21 @@ impl App {
                     Message::PyfaImported,
                 );
             }
-            Message::PyfaImported(result) => match result {
-                Ok((saved, skipped, unmatched)) => {
-                    self.status = format!(
-                        "Imported {saved} fits from Pyfa, {skipped} skipped, {unmatched} items not matched to a type"
-                    );
-                    if let Some((game, _)) = self.ready() {
-                        self.saved = rufa_store::saved_fits(&game.info(), &self.config_dir)
-                            .unwrap_or_default();
+            Message::PyfaImported(result) => {
+                self.pyfa_pending = false;
+                match result {
+                    Ok((saved, skipped, unmatched)) => {
+                        self.status = format!(
+                            "Imported {saved} fits from Pyfa, {skipped} skipped, {unmatched} items not matched to a type"
+                        );
+                        if let Some((game, _)) = self.ready() {
+                            self.saved = rufa_store::saved_fits(&game.info(), &self.config_dir)
+                                .unwrap_or_default();
+                        }
                     }
+                    Err(e) => self.status = format!("Pyfa import failed: {e}"),
                 }
-                Err(e) => self.status = format!("Pyfa import failed: {e}"),
-            },
+            }
             Message::DuplicateSaved(path) => {
                 if let Some((game, _)) = self.ready() {
                     match rufa_store::load_fit(&game.info(), &path) {
@@ -3401,6 +3410,22 @@ mod tests {
         assert!(app.saved.iter().any(|f| f.name == "Pyfa Rifter"));
         let _ = app.update(Message::OpenSaved(app.saved[0].path.clone()));
         assert!(app.docs[0].doc.stats.offense.dps > 0.0);
+        let _ = std::fs::remove_dir_all(&app.config_dir);
+    }
+
+    #[test]
+    fn a_running_pyfa_import_refuses_a_second_one() {
+        let Some(mut app) = app() else { return };
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../rufa-store/tests/fixtures/pyfa-saveddata.db");
+        unsafe { std::env::set_var("RUFA_PYFA_DB", &fixture) };
+        let _ = app.update(Message::ImportPyfa);
+        assert!(app.pyfa_pending, "the first press starts the import");
+        app.status = "untouched".to_string();
+        let _ = app.update(Message::ImportPyfa);
+        assert_eq!(app.status, "untouched", "the second press does nothing");
+        let _ = app.update(Message::PyfaImported(Ok((0, 0, 0))));
+        assert!(!app.pyfa_pending, "the result frees the button");
         let _ = std::fs::remove_dir_all(&app.config_dir);
     }
 
