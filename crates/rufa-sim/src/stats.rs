@@ -98,6 +98,22 @@ pub struct Offense {
     pub dps_spooled: f64,
 }
 
+impl Offense {
+    /// `dps` is everything the fit does: racked weapons, drones and fighters.
+    /// These three take the other two out, leaving what the racks do.
+    pub fn weapons(&self) -> f64 {
+        (self.dps - self.drone_dps - self.fighter_dps).max(0.0)
+    }
+
+    pub fn weapons_with_reload(&self) -> f64 {
+        (self.dps_with_reload - self.drone_dps - self.fighter_dps).max(0.0)
+    }
+
+    pub fn weapons_spooled(&self) -> f64 {
+        (self.dps_spooled - self.drone_dps - self.fighter_dps).max(0.0)
+    }
+}
+
 pub const DAMAGE_NAMES: [&str; 4] = ["EM", "Thermal", "Kinetic", "Explosive"];
 
 pub const TARGET_CLASSES: [(&str, f64); 7] = [
@@ -228,7 +244,9 @@ fn jam_chance(strength: f64, sensor: usize, jammers: &[[f64; 4]]) -> f64 {
 }
 
 /// Weapon damage once a spooling weapon has run up to its maximum.
-fn spooled_dps(ids: &AttrIds, fit: &Fit, calc: &Calculation, dps: f64) -> f64 {
+/// Only a racked weapon spools. `dps` holds drones and fighters as well, so
+/// the spooled total is the spooled racks plus those two unchanged.
+fn spooled_dps(ids: &AttrIds, fit: &Fit, calc: &Calculation, dps: f64, steady: f64) -> f64 {
     let mut plain = 0.0;
     let mut spooled = 0.0;
     for (item, result) in fit.items.iter().zip(&calc.items) {
@@ -245,7 +263,7 @@ fn spooled_dps(ids: &AttrIds, fit: &Fit, calc: &Calculation, dps: f64) -> f64 {
     if plain <= 0.0 || spooled <= plain {
         return dps;
     }
-    dps * spooled / plain
+    spooled + steady
 }
 
 fn damage_split(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> [f64; 4] {
@@ -412,7 +430,13 @@ impl Stats {
                 drone_dps: a(ids.drone_dps),
                 fighter_dps: a(ids.fighter_dps),
                 damage: damage_split(ids, fit, calc),
-                dps_spooled: spooled_dps(ids, fit, calc, a(ids.dps)),
+                dps_spooled: spooled_dps(
+                    ids,
+                    fit,
+                    calc,
+                    a(ids.dps),
+                    a(ids.drone_dps) + a(ids.fighter_dps),
+                ),
             },
             capacitor: Capacitor {
                 capacity: a(ids.capacitor_capacity),

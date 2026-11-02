@@ -40,11 +40,11 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         ),
     ]
     .spacing(ui::GAP_ROW);
-    let guns = s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps;
-    if guns > 0.0 {
+    let dps = s.offense.dps;
+    if dps > 0.0 {
         col = col.push(ui::section(
             "Offense",
-            Some(fmt::num(guns, 1)),
+            Some(fmt::num(dps, 1)),
             app.stats_folded.contains("Offense"),
             offense(app, doc, s, narrow),
         ));
@@ -453,20 +453,18 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
     };
     let mut col = column![].spacing(2);
     // The name says what shoots, the value says how much and in what.
-    if o.dps > 0.0 {
-        let shown = if o.dps_spooled > o.dps + 0.05 {
-            format!(
-                "{} - {} dps",
-                fmt::num(o.dps, 1),
-                fmt::num(o.dps_spooled, 1)
-            )
+    let weapons = o.weapons();
+    if weapons > 0.0 {
+        let spooled = o.weapons_spooled();
+        let shown = if spooled > weapons + 0.05 {
+            format!("{} - {} dps", fmt::num(weapons, 1), fmt::num(spooled, 1))
         } else {
-            format!("{} dps", fmt::num(o.dps, 1))
+            format!("{} dps", fmt::num(weapons, 1))
         };
         col = col.push(ui::stat_row(narrow, "Guns", shown));
     }
     for (name, value, unit) in [
-        ("Guns with reload", o.dps_with_reload, "dps"),
+        ("Guns with reload", o.weapons_with_reload(), "dps"),
         ("Volley", o.volley, "damage"),
         ("Drones", o.drone_dps, "dps"),
         ("Fighters", o.fighter_dps, "dps"),

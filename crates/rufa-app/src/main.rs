@@ -2387,6 +2387,24 @@ mod tests {
     }
 
     #[test]
+    fn the_engine_total_already_holds_the_drones() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Myrmidon, split]\n\nDamage Control II\n\n10MN Afterburner II\n\nHeavy Neutron Blaster II, Void M\nHeavy Neutron Blaster II, Void M\n\n\nHammerhead II x5\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        assert_eq!(app.docs.len(), 1, "{}", app.status);
+        let o = &app.docs[0].doc.stats.offense;
+        assert!(o.drone_dps > 0.0, "the drones shoot");
+        assert!(o.weapons() > 0.0, "the blasters shoot");
+        assert!(
+            (o.dps - o.weapons() - o.drone_dps).abs() < 0.01,
+            "dps {} is weapons {} plus drones {}",
+            o.dps,
+            o.weapons(),
+            o.drone_dps
+        );
+    }
+
+    #[test]
     fn a_logistics_fit_reports_what_it_hands_out() {
         let Some(mut app) = app() else { return };
         let eft = "[Guardian, logi]\n\nLarge Remote Armor Repairer II\nLarge Remote Armor Repairer II\nLarge Remote Capacitor Transmitter II\n\nMedium Armor Maintenance Bot II x5\n";
