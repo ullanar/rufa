@@ -2929,7 +2929,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rufa-app"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "iced",
  "mslnk",
@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "rufa-data"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "esf-data",
  "ring",
@@ -2952,7 +2952,7 @@ dependencies = [
 
 [[package]]
 name = "rufa-sim"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "esf-dogma-engine",
  "esf-format",
@@ -2961,7 +2961,7 @@ dependencies = [
 
 [[package]]
 name = "rufa-store"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rufa-data",
  "rufa-sim",
