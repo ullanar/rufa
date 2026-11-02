@@ -632,7 +632,7 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     } else {
         theme::DANGER_TEXT
     };
-    column![
+    let mut col = column![
         text(verdict)
             .size(ui::SMALL)
             .font(theme::UI_MEDIUM)
@@ -667,18 +667,28 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
             "Modules draw",
             format!("{} GJ/s", fmt::num(c.peak_load, 2))
         ),
-        ui::stat_row_colored(
-            narrow,
-            "Left over",
-            format!(
-                "{}{} GJ/s",
-                if net >= 0.0 { "+" } else { "" },
-                fmt::num(net, 2)
-            ),
-            net_color
-        ),
     ]
-    .spacing(2)
+    .spacing(2);
+    // A remote transmitter feeds the simulation, so it belongs next to the
+    // numbers the verdict came from.
+    if s.incoming.capacitor > 0.0 {
+        col = col.push(ui::stat_row_colored(
+            narrow,
+            "Incoming capacitor",
+            format!("+{} GJ/s", fmt::num(s.incoming.capacitor, 2)),
+            theme::SUCCESS_TEXT,
+        ));
+    }
+    col.push(ui::stat_row_colored(
+        narrow,
+        "Left over",
+        format!(
+            "{}{} GJ/s",
+            if net >= 0.0 { "+" } else { "" },
+            fmt::num(net, 2)
+        ),
+        net_color,
+    ))
     .into()
 }
 
