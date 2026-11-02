@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/ullanar/rufa/compare/v0.6.0...v0.6.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **app:** the damage total counted drones and fighters twice ([8056ada](https://github.com/ullanar/rufa/commit/8056ada35b893032ecf906b35b9f68ea2b2dddab))
+
 ## [0.6.0](https://github.com/ullanar/rufa/compare/v0.5.0...v0.6.0) (2026-11-01)
 
 
