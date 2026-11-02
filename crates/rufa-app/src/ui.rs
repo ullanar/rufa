@@ -189,6 +189,60 @@ pub fn scroll_x<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Me
         .style(theme::scroll)
 }
 
+/// Advance widths of Inter Medium in em, ASCII 32 to 126. Medium runs wider
+/// than Regular at every glyph, so one table over-reserves rather than
+/// overflows.
+const ADVANCE: [f32; 95] = [
+    0.267, 0.304, 0.495, 0.639, 0.646, 0.993, 0.653, 0.313, //  !"#$%&'
+    0.369, 0.369, 0.521, 0.667, 0.303, 0.462, 0.303, 0.370, // ()*+,-./
+    0.646, 0.415, 0.616, 0.627, 0.656, 0.603, 0.630, 0.571, // 01234567
+    0.629, 0.630, 0.303, 0.315, 0.667, 0.667, 0.667, 0.527, // 89:;<=>?
+    0.982, 0.709, 0.657, 0.733, 0.722, 0.603, 0.589, 0.748, // @ABCDEFG
+    0.745, 0.272, 0.575, 0.688, 0.565, 0.913, 0.756, 0.767, // HIJKLMNO
+    0.642, 0.769, 0.648, 0.646, 0.653, 0.740, 0.709, 1.003, // PQRSTUVW
+    0.701, 0.696, 0.641, 0.369, 0.370, 0.369, 0.477, 0.463, // XYZ[\]^_
+    0.337, 0.568, 0.618, 0.577, 0.618, 0.587, 0.379, 0.620, // `abcdefg
+    0.602, 0.252, 0.252, 0.559, 0.252, 0.888, 0.602, 0.604, // hijklmno
+    0.618, 0.618, 0.387, 0.539, 0.340, 0.602, 0.575, 0.829, // pqrstuvw
+    0.557, 0.575, 0.559, 0.440, 0.346, 0.440, 0.667, // xyz{|}~
+];
+
+const ELLIPSIS: f32 = 0.91;
+
+fn advance(c: char) -> f32 {
+    let i = c as usize;
+    if (32..127).contains(&i) {
+        ADVANCE[i - 32]
+    } else {
+        0.62
+    }
+}
+
+/// What the string takes on screen at this font size.
+pub fn width(s: &str, size: f32) -> f32 {
+    s.chars().map(advance).sum::<f32>() * size
+}
+
+/// Cuts to the given pixels and ends in an ellipsis when anything was dropped.
+pub fn clip_px(s: &str, max: f32, size: f32) -> String {
+    if width(s, size) <= max {
+        return s.to_string();
+    }
+    let dots = ELLIPSIS * size;
+    let mut out = String::new();
+    let mut used = 0.0;
+    for c in s.chars() {
+        let next = advance(c) * size;
+        if used + next + dots > max {
+            break;
+        }
+        out.push(c);
+        used += next;
+    }
+    out.push('\u{2026}');
+    out
+}
+
 pub fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
@@ -453,5 +507,33 @@ impl canvas::Program<Message> for StateGlyph {
             }
         }
         vec![frame.into_geometry()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clipped_name_fits_the_pixels_it_was_given() {
+        for name in [
+            "800mm Repeating Cannon II",
+            "Pithum A-Type Multispectrum Shield Hardener",
+            "500MN Microwarpdrive II",
+        ] {
+            for max in [40.0, 77.0, 165.0, 200.0, 420.0] {
+                let out = clip_px(name, max, BODY);
+                assert!(
+                    width(&out, BODY) <= max,
+                    "{out:?} is wider than {max} pixels"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_name_that_fits_keeps_every_character() {
+        let name = "Tracking Computer II";
+        assert_eq!(clip_px(name, width(name, BODY), BODY), name);
     }
 }
