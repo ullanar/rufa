@@ -1,4 +1,5 @@
 mod character;
+pub mod damage;
 pub mod dedup;
 pub mod implants;
 mod prices;
@@ -14,6 +15,7 @@ use rufa_sim::Fit;
 use rufa_sim::format::esf;
 
 pub use character::{Character, delete_character, list_characters, save_character};
+pub use damage::DamagePattern;
 pub use dedup::{Duplicates, Identity};
 pub use implants::ImplantSet;
 pub use prices::{Cached, PriceCache};
