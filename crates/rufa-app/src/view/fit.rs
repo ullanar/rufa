@@ -659,6 +659,12 @@ fn drone_row<'a>(
     if !compact {
         line = line.push(info_cell(info, 160.0));
     }
+    // The whole stack, launched and stowed alike.
+    line = line.push(price_cell(
+        app.prices
+            .get(type_id)
+            .map(|unit| unit * f64::from(stack.total())),
+    ));
 
     line = line.push(
         text(format!("x{}", stack.total()))
@@ -693,6 +699,25 @@ fn drone_row<'a>(
     .on_right_press(Message::OpenMenu(first))
     .on_enter(Message::HoverItem(Some(first)))
     .on_exit(Message::HoverItem(None))
+    .into()
+}
+
+/// What the line costs, right under the numbers it belongs to. Blank when no
+/// price is cached, since zero would be a claim.
+fn price_cell<'a>(price: Option<f64>) -> El<'a> {
+    let shown = match price {
+        Some(v) => format!("{} ISK", fmt::short(v)),
+        None => String::new(),
+    };
+    container(
+        text(shown)
+            .size(ui::SMALL)
+            .color(theme::MUTED)
+            .wrapping(text::Wrapping::None),
+    )
+    .clip(true)
+    .width(Length::Fixed(84.0))
+    .align_x(iced::alignment::Horizontal::Right)
     .into()
 }
 
@@ -1037,6 +1062,7 @@ fn item_row<'a>(
             },
             if compact { 0.0 } else { 200.0 },
         ),
+        price_cell(app.item_price(item)),
     ]
     .spacing(ui::GAP_ROW)
     .align_y(iced::Alignment::Center);

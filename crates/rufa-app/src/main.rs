@@ -827,16 +827,28 @@ impl App {
 
     /// What the fit costs, with the pilot's implants and boosters counted
     /// apart: they stay in the head when the ship is lost.
+    /// What this line of the fit costs: the stack, plus the charge in it.
+    /// `None` when neither has a cached price, so a row can stay blank
+    /// instead of claiming zero.
+    pub fn item_price(&self, item: &rufa_sim::FitItem) -> Option<f64> {
+        let module = self.prices.get(item.type_id);
+        let charge = item
+            .charge
+            .as_ref()
+            .and_then(|c| self.prices.get(c.type_id));
+        if module.is_none() && charge.is_none() {
+            return None;
+        }
+        Some(module.unwrap_or(0.0) * f64::from(item.quantity) + charge.unwrap_or(0.0))
+    }
+
     pub fn fit_price(&self, doc: &Doc) -> Option<Price> {
         let mut price = Price {
             hull: self.prices.get(doc.doc.fit.ship.type_id)?,
             head: 0.0,
         };
         for item in &doc.doc.fit.items {
-            let mut cost = self.prices.get(item.type_id).unwrap_or(0.0) * item.quantity as f64;
-            if let Some(charge) = &item.charge {
-                cost += self.prices.get(charge.type_id).unwrap_or(0.0);
-            }
+            let cost = self.item_price(item).unwrap_or(0.0);
             match item.slot {
                 Slot::Implant(_) | Slot::Booster(_) => price.head += cost,
                 _ => price.hull += cost,
@@ -3533,6 +3545,52 @@ mod tests {
         let _ = app.update(Message::RemoveDuplicates);
         assert_eq!(app.saved.len(), 1, "{}", app.status);
         assert_eq!(app.saved[0].path, kept, "the shorter name stays");
+        let _ = std::fs::remove_dir_all(&app.config_dir);
+    }
+
+    #[test]
+    fn a_row_costs_the_stack_plus_its_charge() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Rifter, money]\n\nDamage Control II\n\n\n200mm AutoCannon II, EMP S\n\n\nHobgoblin II x5\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        assert_eq!(app.docs.len(), 1, "{}", app.status);
+
+        let gun = type_id(&app, "200mm AutoCannon II");
+        let emp = type_id(&app, "EMP S");
+        let hobgoblin = type_id(&app, "Hobgoblin II");
+        let rifter = type_id(&app, "Rifter");
+        let dcu = type_id(&app, "Damage Control II");
+        app.prices.insert_all(&std::collections::BTreeMap::from([
+            (rifter, 1_000_000.0),
+            (dcu, 500_000.0),
+            (gun, 2_000_000.0),
+            (emp, 1_000.0),
+            (hobgoblin, 100_000.0),
+        ]));
+
+        let fit = &app.docs[0].doc.fit;
+        let by_type = |id: i32| {
+            fit.items
+                .iter()
+                .filter(|it| it.type_id == id)
+                .map(|it| app.item_price(it).unwrap_or(0.0))
+                .sum::<f64>()
+        };
+        assert_eq!(by_type(gun), 2_001_000.0, "the gun carries its charge");
+        assert_eq!(by_type(dcu), 500_000.0);
+        assert_eq!(by_type(hobgoblin), 500_000.0, "five drones");
+
+        let price = app.fit_price(&app.docs[0]).unwrap();
+        let items: f64 = fit
+            .items
+            .iter()
+            .map(|it| app.item_price(it).unwrap_or(0.0))
+            .sum();
+        assert_eq!(
+            price.hull + price.head,
+            1_000_000.0 + items,
+            "the rows add up to the fit price"
+        );
         let _ = std::fs::remove_dir_all(&app.config_dir);
     }
 
