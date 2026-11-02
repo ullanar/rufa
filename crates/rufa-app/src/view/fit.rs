@@ -231,7 +231,7 @@ fn summary<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
     } else {
         (fmt::seconds(cap.depletes_in), theme::WARNING_TEXT)
     };
-    let dps = s.offense.dps + s.offense.drone_dps + s.offense.fighter_dps;
+    let dps = s.offense.dps;
     let mut line = row![
         figure("DPS", fmt::num(dps, 1), theme::TEXT),
         figure("EHP", fmt::num(s.defense.ehp, 0), theme::TEXT),
