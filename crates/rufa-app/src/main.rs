@@ -228,6 +228,10 @@ pub enum Message {
     SetMode(Option<i32>),
     ReplaceItem(usize, i32),
     DeleteSaved(PathBuf),
+    FindDuplicates,
+    DuplicatesFound(Vec<rufa_store::Duplicates>),
+    RemoveDuplicates,
+    ForgetDuplicates,
     ImportPyfa,
     PyfaImported(Result<(usize, usize, usize, usize), String>),
     Mutate(usize, i32),
@@ -352,6 +356,8 @@ pub struct App {
     pub market_rack: Option<rufa_sim::place::Rack>,
     pub stats_folded: std::collections::BTreeSet<&'static str>,
     pub hovered_saved: Option<PathBuf>,
+    pub duplicates: Vec<rufa_store::Duplicates>,
+    pub duplicates_pending: bool,
     pub show_ehp: bool,
     pub center: CenterTab,
     pub graph_kind: GraphKind,
@@ -473,6 +479,8 @@ impl App {
             target_resists: Default::default(),
             esi_pending: false,
             pyfa_pending: false,
+            duplicates: Vec::new(),
+            duplicates_pending: false,
             icons: Default::default(),
             icons_pending: Default::default(),
         };
@@ -534,6 +542,12 @@ impl App {
                 self.left = LeftTab::Market;
             } else if arg == "--fits" {
                 self.left = LeftTab::Fits;
+            } else if arg == "--duplicates" {
+                self.left = LeftTab::Fits;
+                if let Some((game, _)) = self.ready() {
+                    self.duplicates = rufa_store::dedup::duplicates(&game.info(), &self.config_dir)
+                        .unwrap_or_default();
+                }
             } else if arg == "--skills" {
                 self.left = LeftTab::Character;
             } else if arg == "--graph" {
@@ -1177,6 +1191,57 @@ impl App {
                             }
                         }
                         Err(e) => self.status = format!("Cannot read {}: {e}", path.display()),
+                    }
+                }
+            }
+            // Looking costs nothing. The list names every file before the
+            // second press deletes any of them.
+            // Reading every saved fit takes most of a second over thousands
+            // of files, so the search runs off the UI thread.
+            Message::FindDuplicates => {
+                let Some((game, _)) = self.ready() else {
+                    return Task::none();
+                };
+                if self.duplicates_pending {
+                    return Task::none();
+                }
+                let config = self.config_dir.clone();
+                self.duplicates_pending = true;
+                self.status = "Looking for duplicate fits".to_string();
+                return Task::perform(
+                    async move {
+                        rufa_store::dedup::duplicates(&game.info(), &config).unwrap_or_default()
+                    },
+                    Message::DuplicatesFound,
+                );
+            }
+            Message::DuplicatesFound(groups) => {
+                self.duplicates_pending = false;
+                let copies: usize = groups.iter().map(|d| d.remove.len()).sum();
+                self.status = match copies {
+                    0 => "No duplicate fits".to_string(),
+                    n => format!("{n} copies over {} fits", groups.len()),
+                };
+                self.duplicates = groups;
+            }
+            Message::ForgetDuplicates => self.duplicates.clear(),
+            Message::RemoveDuplicates => {
+                if let Some((game, _)) = self.ready() {
+                    let groups = std::mem::take(&mut self.duplicates);
+                    let gone: Vec<PathBuf> = groups.iter().flat_map(|d| d.remove.clone()).collect();
+                    match rufa_store::dedup::remove_duplicates(&self.config_dir, &groups) {
+                        Ok(n) => {
+                            self.status = format!("Deleted {n} duplicate fits");
+                            for doc in &mut self.docs {
+                                if doc.path.as_ref().is_some_and(|p| gone.contains(p)) {
+                                    doc.path = None;
+                                    doc.dirty = true;
+                                }
+                            }
+                            self.saved = rufa_store::saved_fits(&game.info(), &self.config_dir)
+                                .unwrap_or_default();
+                        }
+                        Err(e) => self.status = format!("Cannot delete: {e}"),
                     }
                 }
             }
@@ -3429,6 +3494,45 @@ mod tests {
         assert!(app.saved.iter().any(|f| f.name == "Pyfa Rifter"));
         let _ = app.update(Message::OpenSaved(app.saved[0].path.clone()));
         assert!(app.docs[0].doc.stats.offense.dps > 0.0);
+        let _ = std::fs::remove_dir_all(&app.config_dir);
+    }
+
+    #[test]
+    fn duplicates_are_listed_before_anything_is_deleted() {
+        let Some(mut app) = app() else { return };
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../rufa-store/tests/fixtures/pyfa-saveddata.db");
+        let game: &'static Game = app.game.as_ref().unwrap();
+        let ids = app.ids.unwrap();
+        let report = rufa_store::pyfa::read(&fixture, &game.info(), &ids).unwrap();
+        let first = &report.fits[0].fit;
+        let hull = game.type_name(first.ship.type_id).to_string();
+        let kept = rufa_store::save_fit(&game.info(), &app.config_dir, first, None, &hull).unwrap();
+        // What a second import used to leave: the same fit under a suffix.
+        let stem = kept.file_stem().unwrap().to_string_lossy().into_owned();
+        let copy = kept.with_file_name(format!("{stem}-2.esf"));
+        std::fs::copy(&kept, &copy).unwrap();
+        app.saved = rufa_store::saved_fits(&game.info(), &app.config_dir).unwrap();
+        assert_eq!(app.saved.len(), 2);
+
+        // The search runs off the UI thread, so the test hands in its result.
+        let found =
+            |app: &App| rufa_store::dedup::duplicates(&game.info(), &app.config_dir).unwrap();
+        let _ = app.update(Message::FindDuplicates);
+        assert!(app.duplicates_pending, "the press starts the search");
+        let _ = app.update(Message::DuplicatesFound(found(&app)));
+        assert!(!app.duplicates_pending);
+        assert_eq!(app.duplicates.len(), 1, "{}", app.status);
+        assert_eq!(app.saved.len(), 2, "looking deletes nothing");
+
+        let _ = app.update(Message::ForgetDuplicates);
+        assert!(app.duplicates.is_empty());
+        assert_eq!(app.saved.len(), 2, "cancelling deletes nothing");
+
+        let _ = app.update(Message::DuplicatesFound(found(&app)));
+        let _ = app.update(Message::RemoveDuplicates);
+        assert_eq!(app.saved.len(), 1, "{}", app.status);
+        assert_eq!(app.saved[0].path, kept, "the shorter name stays");
         let _ = std::fs::remove_dir_all(&app.config_dir);
     }
 

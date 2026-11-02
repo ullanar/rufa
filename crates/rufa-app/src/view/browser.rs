@@ -4,6 +4,7 @@ use iced::widget::{
 };
 use rufa_data::catalog::MARKET_ROOTS;
 
+use crate::fmt;
 use crate::theme;
 use crate::ui::{self, El};
 use rufa_data::icons::Kind;
@@ -296,18 +297,77 @@ fn fits(app: &App) -> El<'_> {
     };
     let head = row![
         ui::eyebrow("Saved fits").width(Length::Fill),
-        ui::small(app.saved.len().to_string()),
-        import,
+        ui::small(fmt::num(app.saved.len() as f64, 0)),
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
+    let mut actions = row![import].spacing(ui::GAP);
+    if app.duplicates.is_empty() && app.saved.len() > 1 {
+        let find: El<'_> = if app.duplicates_pending {
+            button(text("Looking").size(ui::SMALL))
+                .padding(ui::pill(ui::PAD))
+                .style(theme::ghost)
+                .into()
+        } else {
+            button(text("Find duplicates").size(ui::SMALL))
+                .padding(ui::pill(ui::PAD))
+                .style(theme::ghost)
+                .on_press(Message::FindDuplicates)
+                .into()
+        };
+        actions = actions.push(find);
+    }
 
     column![
         search("Search saved fits", &app.fit_search, Message::FitSearch),
         head,
+        actions.wrap(),
+        duplicate_panel(app),
         ui::scroll(list).height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
+    .into()
+}
+
+/// The same shape as a stats section: a name, the number that matters, and
+/// one fact per row. Seven thousand file names say less than three counts.
+fn duplicate_panel(app: &App) -> El<'_> {
+    if app.duplicates.is_empty() {
+        return space().height(0).into();
+    }
+    let going: usize = app.duplicates.iter().map(|d| d.remove.len()).sum();
+    let fits = app.duplicates.len();
+    let count = |n: usize| fmt::num(n as f64, 0);
+    let head = row![
+        ui::eyebrow("duplicates").width(Length::Fill),
+        ui::value_colored(count(going), theme::DANGER_TEXT),
+    ]
+    .spacing(ui::GAP_ROW)
+    .align_y(iced::Alignment::Center);
+    container(
+        column![
+            head,
+            ui::rule(),
+            ui::stat_row(false, "Fits with copies", count(fits)),
+            ui::stat_row(false, "Each fit keeps", "1".to_string()),
+            row![
+                button(text(format!("Delete {} files", count(going))).size(ui::SMALL))
+                    .padding(ui::pill(ui::PAD))
+                    .style(theme::danger)
+                    .on_press(Message::RemoveDuplicates),
+                button(text("Cancel").size(ui::SMALL))
+                    .padding(ui::pill(ui::PAD))
+                    .style(theme::ghost)
+                    .on_press(Message::ForgetDuplicates),
+            ]
+            .spacing(ui::GAP)
+            .wrap(),
+        ]
+        .spacing(ui::GAP),
+    )
+    .padding([ui::GAP_ROW, ui::PAD])
+    .width(Length::Fill)
+    .style(theme::card)
     .into()
 }
 
