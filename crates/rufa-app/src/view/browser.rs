@@ -282,13 +282,22 @@ fn fits(app: &App) -> El<'_> {
         }
     }
 
-    let head = row![
-        ui::eyebrow("Saved fits").width(Length::Fill),
-        ui::small(app.saved.len().to_string()),
+    // A running import leaves the button unpressable, so a second press
+    // cannot start a second one over the same fits.
+    let import = if app.pyfa_pending {
+        button(text("Importing").size(ui::SMALL))
+            .padding(ui::pill(ui::PAD))
+            .style(theme::secondary)
+    } else {
         button(text("Import from Pyfa").size(ui::SMALL))
             .padding(ui::pill(ui::PAD))
             .style(theme::secondary)
-            .on_press(Message::ImportPyfa),
+            .on_press(Message::ImportPyfa)
+    };
+    let head = row![
+        ui::eyebrow("Saved fits").width(Length::Fill),
+        ui::small(app.saved.len().to_string()),
+        import,
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
