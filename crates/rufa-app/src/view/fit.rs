@@ -334,10 +334,27 @@ fn empty_row<'a>(label: String, rail: Color, rack: Option<Rack>) -> El<'a> {
 
 type SlotFilter = fn(Slot) -> bool;
 
-const CHAR: f32 = 6.6;
+/// What `price_cell` reserves, row spacing included.
+const PRICE_WIDTH: f32 = 90.0;
+/// A module name narrower than this says nothing, so other columns give way.
+/// A full name such as 800mm Repeating Cannon II takes 195 pixels.
+const NAME_MIN: f32 = 200.0;
+/// Between two readings on one info line.
+const INFO_SEP: &str = "  \u{b7}  ";
 
-fn name_budget(width: f32, fixed: f32) -> usize {
-    (((width - fixed) / CHAR) as usize).clamp(6, 60)
+fn name_space(width: f32, fixed: f32) -> f32 {
+    (width - fixed).clamp(40.0, 420.0)
+}
+
+/// The name matters most, so it keeps a floor and the info column takes only
+/// what is genuinely spare. Under 40 pixels the column goes away instead.
+fn info_column(longest: f32, width: f32, fixed: f32) -> f32 {
+    if longest <= 0.0 {
+        return 0.0;
+    }
+    let spare = width - fixed - NAME_MIN;
+    let room = (longest + 8.0).min(220.0).min(spare.max(0.0));
+    if room < 40.0 { 0.0 } else { room }
 }
 
 fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
@@ -350,17 +367,23 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         .iter()
         .filter(|item| Rack::of_slot(item.slot).is_some())
         .filter_map(|item| item.charge.as_ref())
-        .map(|c| app.type_name(c.type_id).chars().count())
-        .max()
-        .unwrap_or(0);
-    let charge_width = if longest_charge == 0 {
+        .map(|c| ui::width(app.type_name(c.type_id), ui::SMALL))
+        .fold(0.0f32, f32::max);
+    let charge_width = if longest_charge <= 0.0 {
         0.0
     } else {
-        let wanted = longest_charge as f32 * CHAR + 20.0;
-        wanted.clamp(40.0, if compact { 90.0 } else { 140.0 })
+        (longest_charge + 20.0).clamp(40.0, if compact { 90.0 } else { 140.0 })
     };
-    let info_width = if compact { 0.0 } else { 200.0 };
-    let module_names = name_budget(width, 117.0 + charge_width + info_width);
+    let longest_info = fit
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| Rack::of_slot(item.slot).is_some())
+        .map(|(i, _)| ui::width(&item_info(app, doc, i).join(INFO_SEP), ui::SMALL))
+        .fold(0.0f32, f32::max);
+    let fixed = 123.0 + PRICE_WIDTH + charge_width;
+    let info_width = info_column(longest_info, width, fixed);
+    let module_names = name_space(width, fixed + info_width);
     let layout = &doc.doc.layout;
     let mut col = column![].spacing(1).padding(iced::Padding {
         top: 0.0,
@@ -420,9 +443,9 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                         doc,
                         i,
                         rail_color(rack),
-                        compact,
                         module_names,
                         charge_width,
+                        info_width,
                     ))
                 }
                 None => {
@@ -481,9 +504,9 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                 doc,
                 i,
                 rail,
-                compact,
                 module_names,
                 charge_width,
+                info_width,
             ));
         }
     }
@@ -509,11 +532,17 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> O
             None,
         ));
     }
+    let longest_info = types
+        .iter()
+        .map(|type_id| ui::width(&drone_info(app, doc, *type_id).join(INFO_SEP), ui::SMALL))
+        .fold(0.0f32, f32::max);
+    let pips = f32::from(load.max_launched.clamp(1, 32) as u16) * 12.0;
+    let fixed = 163.0 + PRICE_WIDTH + pips;
+    let info_width = info_column(longest_info, width, fixed);
+    let names = name_space(width, fixed + info_width);
     for type_id in types {
         let room = drones::room(&game.info(), &ids, &doc.doc.calc, type_id);
-        let pips = f32::from(load.max_launched.clamp(1, 32) as u16) * 12.0;
-        let names = name_budget(width, 163.0 + pips + if compact { 0.0 } else { 160.0 });
-        col = col.push(drone_row(app, doc, type_id, room, load, compact, names));
+        col = col.push(drone_row(app, doc, type_id, room, load, info_width, names));
     }
     Some(col.into())
 }
@@ -610,14 +639,24 @@ fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u
     .into()
 }
 
+/// The readings of the first drone of the stack that is not offline.
+fn drone_info(app: &App, doc: &Doc, type_id: i32) -> Vec<String> {
+    let fit = &doc.doc.fit;
+    drones::indexes(fit, type_id)
+        .into_iter()
+        .find(|i| fit.items[*i].state != rufa_sim::State::Offline)
+        .map(|i| item_info(app, doc, i))
+        .unwrap_or_default()
+}
+
 fn drone_row<'a>(
     app: &'a App,
     doc: &'a Doc,
     type_id: i32,
     room: drones::Room,
     load: drones::Load,
-    compact: bool,
-    names: usize,
+    info_width: f32,
+    names: f32,
 ) -> El<'a> {
     let fit = &doc.doc.fit;
     let stack = drones::stack(fit, type_id);
@@ -633,17 +672,13 @@ fn drone_row<'a>(
     } else {
         theme::RAIL_SERVICE
     };
-    let info = indexes
-        .iter()
-        .find(|i| fit.items[**i].state != rufa_sim::State::Offline)
-        .map(|i| item_info(app, doc, *i))
-        .unwrap_or_default();
+    let info = drone_info(app, doc, type_id);
 
     let mut line = row![
         container(space().width(3).height(Length::Fill)).style(theme::rounded(rail, 1.0)),
         icon,
         container(
-            text(ui::clip(app.type_name(type_id), names))
+            text(ui::clip_px(app.type_name(type_id), names, ui::BODY))
                 .size(ui::BODY)
                 .font(theme::UI_MEDIUM)
                 .color(theme::TEXT)
@@ -656,8 +691,8 @@ fn drone_row<'a>(
     .spacing(ui::GAP_ROW)
     .align_y(iced::Alignment::Center);
 
-    if !compact {
-        line = line.push(info_cell(info, 160.0));
+    if info_width > 0.0 {
+        line = line.push(info_cell(info, info_width));
     }
     // The whole stack, launched and stowed alike.
     line = line.push(price_cell(
@@ -716,27 +751,26 @@ fn price_cell<'a>(price: Option<f64>) -> El<'a> {
             .wrapping(text::Wrapping::None),
     )
     .clip(true)
-    .width(Length::Fixed(84.0))
+    .width(Length::Fixed(PRICE_WIDTH - ui::GAP_ROW))
     .align_x(iced::alignment::Horizontal::Right)
     .into()
 }
 
 fn info_cell<'a>(parts: Vec<String>, width: f32) -> El<'a> {
-    let budget = (width / 6.1) as usize;
     let mut shown = String::new();
     for part in parts {
         let next = if shown.is_empty() {
             part
         } else {
-            format!("{shown}  ·  {part}")
+            format!("{shown}{INFO_SEP}{part}")
         };
-        if next.chars().count() > budget {
+        if ui::width(&next, ui::SMALL) > width {
             break;
         }
         shown = next;
     }
     container(
-        text(ui::clip(&shown, budget))
+        text(ui::clip_px(&shown, width, ui::SMALL))
             .size(ui::SMALL)
             .color(theme::MUTED)
             .wrapping(text::Wrapping::None)
@@ -973,9 +1007,9 @@ fn item_row<'a>(
     doc: &'a Doc,
     i: usize,
     rail: Color,
-    compact: bool,
-    names: usize,
+    names: f32,
     charge_width: f32,
+    info_width: f32,
 ) -> El<'a> {
     let item = &doc.doc.fit.items[i];
     let result = doc.doc.calc.items.get(i);
@@ -1038,7 +1072,7 @@ fn item_row<'a>(
         glyph,
         icon,
         container(
-            text(ui::clip(&name, names))
+            text(ui::clip_px(&name, names, ui::BODY))
                 .size(ui::BODY)
                 .font(theme::UI_MEDIUM)
                 .color(theme::TEXT)
@@ -1055,12 +1089,12 @@ fn item_row<'a>(
                 .and_then(|c| app.icon(Kind::Icon, c.type_id)),
         ),
         info_cell(
-            if compact {
-                Vec::new()
-            } else {
+            if info_width > 0.0 {
                 item_info(app, doc, i)
+            } else {
+                Vec::new()
             },
-            if compact { 0.0 } else { 200.0 },
+            info_width,
         ),
         price_cell(app.item_price(item)),
     ]
@@ -1387,7 +1421,7 @@ fn charge_cell<'a>(i: usize, charge: String, width: f32, icon: Option<image::Han
             row![
                 picture,
                 container(
-                    text(ui::clip(&charge, ((width - 18.0) / 6.0) as usize))
+                    text(ui::clip_px(&charge, width - 18.0, ui::SMALL))
                         .size(ui::SMALL)
                         .color(theme::TEXT_SECONDARY)
                         .wrapping(text::Wrapping::None),
