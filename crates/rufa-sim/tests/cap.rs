@@ -33,7 +33,7 @@ fn simulation_agrees_with_the_engine_estimate() {
     assert!(engine > 0.0, "engine says stable: {engine}");
     let drains = rufa_sim::cap::drains(&ids, &fit, &calc);
     assert!(drains.len() >= 4, "{drains:?}");
-    let result = rufa_sim::cap::simulate_fit(&ids, &fit, &calc, 3600.0);
+    let result = rufa_sim::cap::simulate_fit(&ids, &fit, &calc, 0.0, 3600.0);
     let simulated = result.depleted_at.expect("simulation depletes too");
     let ratio = simulated / engine;
     assert!(
@@ -81,7 +81,7 @@ fn run(eft: &str) -> (Vec<rufa_sim::cap::Drain>, rufa_sim::cap::CapResult) {
     let fit = rufa_sim::fit_with_skill_level(&sde, fit, 5);
     let calc = rufa_sim::calculate(&info, &fit);
     let drains = rufa_sim::cap::drains(&ids, &fit, &calc);
-    let result = rufa_sim::cap::simulate_fit(&ids, &fit, &calc, 3600.0);
+    let result = rufa_sim::cap::simulate_fit(&ids, &fit, &calc, 0.0, 3600.0);
     (drains, result)
 }
 

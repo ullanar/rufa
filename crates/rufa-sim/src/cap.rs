@@ -60,6 +60,12 @@ pub fn recharge(cap: f64, capacity: f64, recharge_time: f64, dt: f64) -> f64 {
     (next * next * capacity).min(capacity)
 }
 
+/// The level a cycle later: the capacitor's own recharge plus what a remote
+/// transmitter hands over in that time.
+fn grow(cap: f64, capacity: f64, recharge_time: f64, incoming: f64, dt: f64) -> f64 {
+    (recharge(cap, capacity, recharge_time, dt) + incoming * dt).min(capacity)
+}
+
 pub fn drains(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> Vec<Drain> {
     let mut groups: Vec<(i32, Vec<Drain>)> = Vec::new();
     for (item, result) in fit.items.iter().zip(&calc.items) {
@@ -115,7 +121,13 @@ pub fn drains(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> Vec<Drain> {
     out
 }
 
-pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f64) -> CapResult {
+pub fn simulate(
+    capacity: f64,
+    recharge_time: f64,
+    incoming: f64,
+    drains: &[Drain],
+    horizon: f64,
+) -> CapResult {
     let mut cap = capacity;
     let mut low = capacity;
     let mut time = 0.0;
@@ -134,7 +146,7 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
             break;
         }
         let drain = &drains[event.drain];
-        let level = recharge(cap, capacity, recharge_time, event.time - time);
+        let level = grow(cap, capacity, recharge_time, incoming, event.time - time);
         // An injector holds its charge back rather than spill what the
         // capacitor cannot take, and tries again a cycle later.
         if drain.amount < 0.0 && level - drain.amount > capacity + 1e-9 {
@@ -171,7 +183,7 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
             drain: event.drain,
         });
     }
-    let end = recharge(cap, capacity, recharge_time, horizon - time);
+    let end = grow(cap, capacity, recharge_time, incoming, horizon - time);
     series.push((horizon, end));
     CapResult {
         depleted_at: None,
@@ -180,10 +192,22 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
     }
 }
 
-pub fn simulate_fit(ids: &AttrIds, fit: &Fit, calc: &Calculation, horizon: f64) -> CapResult {
+pub fn simulate_fit(
+    ids: &AttrIds,
+    fit: &Fit,
+    calc: &Calculation,
+    incoming: f64,
+    horizon: f64,
+) -> CapResult {
     let capacity = attr(&calc.ship, ids.capacitor_capacity).unwrap_or(0.0);
     let recharge_time = attr(&calc.ship, ids.recharge_rate).unwrap_or(0.0) / 1000.0;
-    simulate(capacity, recharge_time, &drains(ids, fit, calc), horizon)
+    simulate(
+        capacity,
+        recharge_time,
+        incoming,
+        &drains(ids, fit, calc),
+        horizon,
+    )
 }
 
 #[cfg(test)]
@@ -214,7 +238,7 @@ mod tests {
             clip: None,
             reload: 0.0,
         }];
-        let r = simulate(1000.0, 500.0, &heavy, 600.0);
+        let r = simulate(1000.0, 500.0, 0.0, &heavy, 600.0);
         assert!(r.depleted_at.is_some());
         let light = [Drain {
             cycle: 10.0,
@@ -223,7 +247,7 @@ mod tests {
             clip: None,
             reload: 0.0,
         }];
-        let r = simulate(1000.0, 500.0, &light, 600.0);
+        let r = simulate(1000.0, 500.0, 0.0, &light, 600.0);
         assert!(r.depleted_at.is_none());
         assert!(r.low > 800.0);
     }
@@ -242,10 +266,10 @@ mod tests {
             reload: 10.0,
             ..endless[0].clone()
         }];
-        let a = simulate(1000.0, 500.0, &endless, 600.0)
+        let a = simulate(1000.0, 500.0, 0.0, &endless, 600.0)
             .depleted_at
             .unwrap();
-        let b = simulate(1000.0, 500.0, &reloading, 600.0)
+        let b = simulate(1000.0, 500.0, 0.0, &reloading, 600.0)
             .depleted_at
             .unwrap();
         assert!(b > a, "reloading {b} should outlast endless {a}");
@@ -260,7 +284,7 @@ mod tests {
             clip: Some(5),
             reload: 10.0,
         }];
-        let r = simulate(1000.0, 500.0, &injector, 600.0);
+        let r = simulate(1000.0, 500.0, 0.0, &injector, 600.0);
         assert!(r.depleted_at.is_none());
         // A full capacitor takes nothing, so every injection waits.
         assert!((r.low - 1000.0).abs() < 1e-6, "{}", r.low);
@@ -275,7 +299,7 @@ mod tests {
             clip: None,
             reload: 0.0,
         };
-        let alone = simulate(1000.0, 500.0, std::slice::from_ref(&drain), 600.0);
+        let alone = simulate(1000.0, 500.0, 0.0, std::slice::from_ref(&drain), 600.0);
         let injector = Drain {
             cycle: 12.0,
             amount: -400.0,
@@ -283,11 +307,29 @@ mod tests {
             clip: Some(8),
             reload: 10.0,
         };
-        let helped = simulate(1000.0, 500.0, &[drain, injector], 600.0);
+        let helped = simulate(1000.0, 500.0, 0.0, &[drain, injector], 600.0);
         let a = alone.depleted_at.unwrap();
         if let Some(b) = helped.depleted_at {
             assert!(b > a, "injected {b} should outlast {a}");
         }
         assert!(helped.low > alone.low);
+    }
+
+    #[test]
+    fn a_remote_transmitter_feeds_the_capacitor_while_it_drains() {
+        let drain = [Drain {
+            cycle: 1.0,
+            amount: 40.0,
+            offset: 0.0,
+            clip: None,
+            reload: 0.0,
+        }];
+        let alone = simulate(1000.0, 500.0, 0.0, &drain, 600.0);
+        let fed = simulate(1000.0, 500.0, 35.0, &drain, 600.0);
+        let a = alone.depleted_at.expect("the fit runs dry alone");
+        match fed.depleted_at {
+            Some(b) => assert!(b > a, "fed {b} should outlast {a}"),
+            None => assert!(fed.low > alone.low),
+        }
     }
 }

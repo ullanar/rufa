@@ -3050,6 +3050,36 @@ mod tests {
     }
 
     #[test]
+    fn a_projected_transmitter_feeds_the_capacitor() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Rifter, fed]
+Damage Control II
+Small Armor Repairer II
+
+1MN Afterburner II
+Warp Scrambler II
+
+200mm AutoCannon II, EMP S
+";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        let alone = app.docs[0]
+            .doc
+            .cap
+            .depleted_at
+            .expect("the fit runs dry on its own");
+
+        let transmitter = type_id(&app, "Small Remote Capacitor Transmitter II");
+        let _ = app.update(Message::AddTo(AddTo::Projected));
+        let _ = app.update(Message::AddItem(transmitter));
+        let _ = app.update(Message::AddTo(AddTo::Fit));
+        let doc = &app.docs[0].doc;
+        assert!(doc.stats.incoming.capacitor > 0.0, "nothing came in");
+        if let Some(fed) = doc.cap.depleted_at {
+            assert!(fed > alone, "fed {fed} vs alone {alone}");
+        }
+    }
+
+    #[test]
     fn tactical_modes_and_variations() {
         let Some(mut app) = app() else { return };
         let game: &'static Game = app.game.as_ref().unwrap();

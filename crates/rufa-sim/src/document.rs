@@ -31,7 +31,7 @@ impl Document {
         Document {
             stats: Stats::from_calc(info, ids, &fit, &calc, &projection::Incoming::default()),
             layout: SlotLayout::from_calc(ids, &calc),
-            cap: crate::cap::simulate_fit(ids, &fit, &calc, CAP_HORIZON),
+            cap: crate::cap::simulate_fit(ids, &fit, &calc, 0.0, CAP_HORIZON),
             last_calc: start.elapsed(),
             calc,
             fit,
@@ -95,7 +95,13 @@ impl Document {
         self.calc = crate::calculate(info, &self.fit);
         self.stats = Stats::from_calc(info, ids, &self.fit, &self.calc, &incoming);
         self.layout = SlotLayout::from_calc(ids, &self.calc);
-        self.cap = crate::cap::simulate_fit(ids, &self.fit, &self.calc, CAP_HORIZON);
+        self.cap = crate::cap::simulate_fit(
+            ids,
+            &self.fit,
+            &self.calc,
+            incoming.reps.capacitor,
+            CAP_HORIZON,
+        );
         self.last_calc = start.elapsed();
     }
 }
