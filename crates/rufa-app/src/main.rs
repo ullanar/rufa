@@ -104,59 +104,25 @@ pub enum CharChoice {
     Saved(usize),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DamagePreset {
-    Uniform,
-    Em,
-    Thermal,
-    Kinetic,
-    Explosive,
+/// One entry of the damage pattern list, named for the picker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DamageChoice {
+    pub index: usize,
+    pub name: String,
 }
 
-impl DamagePreset {
-    pub const ALL: [DamagePreset; 5] = [
-        DamagePreset::Uniform,
-        DamagePreset::Em,
-        DamagePreset::Thermal,
-        DamagePreset::Kinetic,
-        DamagePreset::Explosive,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            DamagePreset::Uniform => "Uniform",
-            DamagePreset::Em => "EM",
-            DamagePreset::Thermal => "Thermal",
-            DamagePreset::Kinetic => "Kinetic",
-            DamagePreset::Explosive => "Explosive",
-        }
+impl std::fmt::Display for DamageChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)
     }
+}
 
-    pub fn profile(self) -> rufa_sim::DamageProfile {
-        let (em, thermal, kinetic, explosive) = match self {
-            DamagePreset::Uniform => (0.25, 0.25, 0.25, 0.25),
-            DamagePreset::Em => (1.0, 0.0, 0.0, 0.0),
-            DamagePreset::Thermal => (0.0, 1.0, 0.0, 0.0),
-            DamagePreset::Kinetic => (0.0, 0.0, 1.0, 0.0),
-            DamagePreset::Explosive => (0.0, 0.0, 0.0, 1.0),
-        };
-        rufa_sim::DamageProfile {
-            em,
-            thermal,
-            kinetic,
-            explosive,
-        }
-    }
-
-    pub fn of(profile: &rufa_sim::DamageProfile) -> Option<DamagePreset> {
-        DamagePreset::ALL.into_iter().find(|p| {
-            let q = p.profile();
-            (q.em - profile.em).abs() < 1e-9
-                && (q.thermal - profile.thermal).abs() < 1e-9
-                && (q.kinetic - profile.kinetic).abs() < 1e-9
-                && (q.explosive - profile.explosive).abs() < 1e-9
-        })
-    }
+fn same_profile(pattern: &rufa_store::DamagePattern, profile: &rufa_sim::DamageProfile) -> bool {
+    let s = pattern.shares();
+    (s[0] - profile.em).abs() < 1e-9
+        && (s[1] - profile.thermal).abs() < 1e-9
+        && (s[2] - profile.kinetic).abs() < 1e-9
+        && (s[3] - profile.explosive).abs() < 1e-9
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,7 +177,7 @@ pub enum Message {
     DroneLaunched(i32, u32),
     DroneCarried(i32, u32),
     LoadCharge(usize, Option<i32>),
-    DamageProfile(DamagePreset),
+    DamagePattern(DamageChoice),
     AddTo(AddTo),
     MoveToCargo(usize),
     QuantityInput(usize, String),
@@ -363,6 +329,7 @@ pub struct App {
     pub graph_kind: GraphKind,
     pub graph_signature: String,
     pub graph_velocity: String,
+    pub damages: Vec<rufa_store::DamagePattern>,
     pub targets: Vec<TargetProfile>,
     pub target: usize,
     pub prices: PriceCache,
@@ -457,6 +424,7 @@ impl App {
             graph_kind: GraphKind::DpsOverDistance,
             graph_signature: String::new(),
             graph_velocity: String::new(),
+            damages: Vec::new(),
             targets: Vec::new(),
             target: 0,
             prices: PriceCache::default(),
@@ -485,6 +453,7 @@ impl App {
             icons_pending: Default::default(),
         };
         app.implant_sets = rufa_store::implants::load(&app.config_dir);
+        app.damages = rufa_store::damage::load(&app.config_dir);
         app.targets = rufa_store::targets::load(&app.config_dir);
         app.prices = PriceCache::load(&app.config_dir);
         if rufa_data::update::needs_download(&data_dir) {
@@ -996,10 +965,21 @@ impl App {
                     Ok(())
                 });
             }
-            Message::DamageProfile(preset) => self.edit_active(|fit, _| {
-                fit.environment.damage_profile = preset.profile();
-                Ok(())
-            }),
+            Message::DamagePattern(choice) => {
+                let Some(pattern) = self.damages.get(choice.index).cloned() else {
+                    return Task::none();
+                };
+                let parts = pattern.shares();
+                self.edit_active(|fit, _| {
+                    fit.environment.damage_profile = rufa_sim::DamageProfile {
+                        em: parts[0],
+                        thermal: parts[1],
+                        kinetic: parts[2],
+                        explosive: parts[3],
+                    };
+                    Ok(())
+                })
+            }
             Message::AddTo(target) => self.add_to = target,
             Message::QuantityInput(i, text) => {
                 let digits: String = text.chars().filter(char::is_ascii_digit).take(6).collect();
@@ -2707,13 +2687,15 @@ mod tests {
         let _ = app.view();
         let _ = app.update(Message::CenterTab(CenterTab::Fit));
         let uniform = app.docs[0].doc.stats.defense.ehp;
-        let _ = app.update(Message::DamageProfile(DamagePreset::Em));
+        let em_at = app.damages.iter().position(|p| p.name == "EM").unwrap();
+        let _ = app.update(Message::DamagePattern(DamageChoice {
+            index: em_at,
+            name: "EM".to_string(),
+        }));
         let em = app.docs[0].doc.stats.defense.ehp;
         assert!(em > uniform, "em {em} uniform {uniform}");
-        assert_eq!(
-            DamagePreset::of(&app.docs[0].doc.fit.environment.damage_profile),
-            Some(DamagePreset::Em)
-        );
+        let profile = &app.docs[0].doc.fit.environment.damage_profile;
+        assert!(same_profile(&app.damages[em_at], profile));
     }
 
     fn release(tag: &str) -> rufa_data::update::Release {

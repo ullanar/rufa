@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, responsive, row, slider, space, text};
+use iced::widget::{button, column, container, pick_list, responsive, row, slider, space, text};
 use iced::{Color, Length};
 use rufa_data::Info;
 use rufa_sim::stats::{Layer, Stats};
@@ -6,7 +6,7 @@ use rufa_sim::stats::{Layer, Stats};
 use crate::fmt;
 use crate::theme;
 use crate::ui::{self, El};
-use crate::{App, DamagePreset, Message};
+use crate::{App, DamageChoice, Message};
 
 pub fn view(app: &App) -> El<'_> {
     let Some(doc) = app.docs.get(app.active) else {
@@ -252,22 +252,30 @@ fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool, ehp: bool) -> El<'
 
 fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
     let d = &s.defense;
-    let current = app
-        .docs
-        .get(app.active)
-        .and_then(|doc| DamagePreset::of(&doc.doc.fit.environment.damage_profile));
+    let patterns: Vec<DamageChoice> = app
+        .damages
+        .iter()
+        .enumerate()
+        .map(|(index, p)| DamageChoice {
+            index,
+            name: p.name.clone(),
+        })
+        .collect();
+    // A fit opened with a pattern nobody stored leaves the picker empty.
+    let current = app.docs.get(app.active).and_then(|doc| {
+        let profile = &doc.doc.fit.environment.damage_profile;
+        patterns
+            .iter()
+            .find(|c| crate::same_profile(&app.damages[c.index], profile))
+            .cloned()
+    });
     let presets = row![
         ui::label("DAMAGE"),
-        ui::segmented(
-            DamagePreset::ALL
-                .into_iter()
-                .map(|preset| (
-                    preset.label().to_string(),
-                    current == Some(preset),
-                    Message::DamageProfile(preset),
-                ))
-                .collect(),
-        ),
+        pick_list(patterns, current, Message::DamagePattern)
+            .placeholder("Custom")
+            .text_size(ui::MICRO)
+            .padding(ui::field(2.0, 6.0))
+            .style(theme::picker),
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
