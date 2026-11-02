@@ -8,8 +8,12 @@ use crate::{Calculation, Fit, ItemResult, State};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Drain {
     pub cycle: f64,
+    /// Positive spends capacitor, negative injects it.
     pub amount: f64,
     pub offset: f64,
+    /// Cycles the clip holds. None runs on without reloading.
+    pub clip: Option<u32>,
+    pub reload: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +61,7 @@ pub fn recharge(cap: f64, capacity: f64, recharge_time: f64, dt: f64) -> f64 {
 }
 
 pub fn drains(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> Vec<Drain> {
-    let mut groups: Vec<(i32, Vec<(f64, f64)>)> = Vec::new();
+    let mut groups: Vec<(i32, Vec<Drain>)> = Vec::new();
     for (item, result) in fit.items.iter().zip(&calc.items) {
         if Rack::of_slot(item.slot).is_none() || result.state < State::Active {
             continue;
@@ -66,9 +70,25 @@ pub fn drains(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> Vec<Drain> {
             continue;
         };
         let need = attr(result, ids.capacitor_need).unwrap_or(0.0);
-        if need == 0.0 {
+        let injected = attr(result, ids.capacitor_injection_amount).unwrap_or(0.0);
+        let amount = need - injected;
+        if amount == 0.0 {
             continue;
         }
+        // The clip empties only while a charge sits in the module.
+        let clip = item.charge.as_ref().and_then(|_| {
+            attr(result, ids.charge_amount)
+                .map(f64::round)
+                .filter(|a| *a >= 1.0)
+                .map(|a| a as u32)
+        });
+        let drain = Drain {
+            cycle: cycle / 1000.0,
+            amount,
+            offset: 0.0,
+            clip,
+            reload: attr(result, ids.reload_time).unwrap_or(0.0) / 1000.0,
+        };
         let entry = match groups.iter_mut().find(|(t, _)| *t == item.type_id) {
             Some(g) => g,
             None => {
@@ -76,17 +96,20 @@ pub fn drains(ids: &AttrIds, fit: &Fit, calc: &Calculation) -> Vec<Drain> {
                 groups.last_mut().unwrap()
             }
         };
-        entry.1.push((cycle / 1000.0, need));
+        entry.1.push(drain);
     }
     let mut out = Vec::new();
     for (_, list) in groups {
         let n = list.len() as f64;
-        for (i, (cycle, amount)) in list.into_iter().enumerate() {
-            out.push(Drain {
-                cycle,
-                amount,
-                offset: cycle * i as f64 / n,
-            });
+        for (i, mut drain) in list.into_iter().enumerate() {
+            let stagger = drain.cycle * i as f64 / n;
+            // An injector hands over its capacitor when the cycle ends.
+            drain.offset = if drain.amount < 0.0 {
+                drain.cycle + stagger
+            } else {
+                stagger
+            };
+            out.push(drain);
         }
     }
     out
@@ -97,6 +120,7 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
     let mut low = capacity;
     let mut time = 0.0;
     let mut series = vec![(0.0, cap)];
+    let mut fired = vec![0u32; drains.len()];
     let mut heap: BinaryHeap<Event> = drains
         .iter()
         .enumerate()
@@ -109,9 +133,19 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
         if event.time > horizon {
             break;
         }
-        cap = recharge(cap, capacity, recharge_time, event.time - time);
-        time = event.time;
         let drain = &drains[event.drain];
+        let level = recharge(cap, capacity, recharge_time, event.time - time);
+        // An injector holds its charge back rather than spill what the
+        // capacitor cannot take, and tries again a cycle later.
+        if drain.amount < 0.0 && level - drain.amount > capacity + 1e-9 {
+            heap.push(Event {
+                time: event.time + drain.cycle,
+                drain: event.drain,
+            });
+            continue;
+        }
+        cap = level;
+        time = event.time;
         if drain.amount > cap + 1e-9 {
             series.push((time, cap));
             return CapResult {
@@ -123,8 +157,17 @@ pub fn simulate(capacity: f64, recharge_time: f64, drains: &[Drain], horizon: f6
         cap = (cap - drain.amount).min(capacity);
         low = low.min(cap);
         series.push((time, cap));
+        let shot = &mut fired[event.drain];
+        *shot += 1;
+        let mut wait = drain.cycle;
+        if let Some(clip) = drain.clip
+            && *shot >= clip
+        {
+            *shot = 0;
+            wait += drain.reload;
+        }
         heap.push(Event {
-            time: time + drain.cycle,
+            time: time + wait,
             drain: event.drain,
         });
     }
@@ -168,6 +211,8 @@ mod tests {
             cycle: 1.0,
             amount: 100.0,
             offset: 0.0,
+            clip: None,
+            reload: 0.0,
         }];
         let r = simulate(1000.0, 500.0, &heavy, 600.0);
         assert!(r.depleted_at.is_some());
@@ -175,9 +220,74 @@ mod tests {
             cycle: 10.0,
             amount: 10.0,
             offset: 0.0,
+            clip: None,
+            reload: 0.0,
         }];
         let r = simulate(1000.0, 500.0, &light, 600.0);
         assert!(r.depleted_at.is_none());
         assert!(r.low > 800.0);
+    }
+
+    #[test]
+    fn a_clip_that_reloads_drains_slower_than_one_that_does_not() {
+        let endless = [Drain {
+            cycle: 1.0,
+            amount: 60.0,
+            offset: 0.0,
+            clip: None,
+            reload: 0.0,
+        }];
+        let reloading = [Drain {
+            clip: Some(4),
+            reload: 10.0,
+            ..endless[0].clone()
+        }];
+        let a = simulate(1000.0, 500.0, &endless, 600.0)
+            .depleted_at
+            .unwrap();
+        let b = simulate(1000.0, 500.0, &reloading, 600.0)
+            .depleted_at
+            .unwrap();
+        assert!(b > a, "reloading {b} should outlast endless {a}");
+    }
+
+    #[test]
+    fn an_injector_postpones_what_the_capacitor_cannot_hold() {
+        let injector = [Drain {
+            cycle: 10.0,
+            amount: -400.0,
+            offset: 10.0,
+            clip: Some(5),
+            reload: 10.0,
+        }];
+        let r = simulate(1000.0, 500.0, &injector, 600.0);
+        assert!(r.depleted_at.is_none());
+        // A full capacitor takes nothing, so every injection waits.
+        assert!((r.low - 1000.0).abs() < 1e-6, "{}", r.low);
+    }
+
+    #[test]
+    fn an_injector_holds_a_drain_the_capacitor_alone_cannot() {
+        let drain = Drain {
+            cycle: 1.0,
+            amount: 40.0,
+            offset: 0.0,
+            clip: None,
+            reload: 0.0,
+        };
+        let alone = simulate(1000.0, 500.0, std::slice::from_ref(&drain), 600.0);
+        let injector = Drain {
+            cycle: 12.0,
+            amount: -400.0,
+            offset: 12.0,
+            clip: Some(8),
+            reload: 10.0,
+        };
+        let helped = simulate(1000.0, 500.0, &[drain, injector], 600.0);
+        let a = alone.depleted_at.unwrap();
+        if let Some(b) = helped.depleted_at {
+            assert!(b > a, "injected {b} should outlast {a}");
+        }
+        assert!(helped.low > alone.low);
     }
 }
