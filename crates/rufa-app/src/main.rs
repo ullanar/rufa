@@ -229,7 +229,7 @@ pub enum Message {
     ReplaceItem(usize, i32),
     DeleteSaved(PathBuf),
     ImportPyfa,
-    PyfaImported(Result<(usize, usize, usize), String>),
+    PyfaImported(Result<(usize, usize, usize, usize), String>),
     Mutate(usize, i32),
     MutationValue(usize, i32, f64),
     RevertMutation(usize),
@@ -1095,26 +1095,45 @@ impl App {
                 self.status = format!("Importing fits from {}", db.display());
                 return Task::perform(
                     async move {
-                        let report = rufa_store::pyfa::read(&db, &game.info(), &ids)
-                            .map_err(|e| e.to_string())?;
+                        let info = game.info();
+                        let report =
+                            rufa_store::pyfa::read(&db, &info, &ids).map_err(|e| e.to_string())?;
+                        // A fit already here is one whose Pyfa id was written
+                        // down, or whose name and items match something saved.
+                        let mut known = rufa_store::dedup::imported_ids(&config, &db);
+                        let mut here =
+                            rufa_store::dedup::saved_identities(&info, &config).unwrap_or_default();
                         let mut saved = 0;
+                        let mut already = 0;
                         let mut unmatched = 0;
                         for imported in &report.fits {
-                            let hull = game.type_name(imported.fit.ship.type_id).to_string();
-                            if rufa_store::save_fit(
-                                &game.info(),
-                                &config,
-                                &imported.fit,
-                                None,
-                                &hull,
-                            )
-                            .is_ok()
-                            {
-                                saved += 1;
+                            let identity = rufa_store::dedup::identity(&info, &imported.fit).ok();
+                            let seen = known.contains(&imported.pyfa_id)
+                                || identity.as_ref().is_some_and(|id| here.contains(id));
+                            if seen {
+                                already += 1;
+                                continue;
                             }
+                            let hull = game.type_name(imported.fit.ship.type_id).to_string();
+                            let Ok(path) =
+                                rufa_store::save_fit(&info, &config, &imported.fit, None, &hull)
+                            else {
+                                continue;
+                            };
+                            let _ = rufa_store::dedup::remember_import(
+                                &config,
+                                &db,
+                                imported.pyfa_id,
+                                &path,
+                            );
+                            known.insert(imported.pyfa_id);
+                            if let Some(id) = identity {
+                                here.insert(id);
+                            }
+                            saved += 1;
                             unmatched += imported.unknown_types;
                         }
-                        Ok((saved, report.skipped, unmatched))
+                        Ok((saved, already, report.skipped, unmatched))
                     },
                     Message::PyfaImported,
                 );
@@ -1122,9 +1141,9 @@ impl App {
             Message::PyfaImported(result) => {
                 self.pyfa_pending = false;
                 match result {
-                    Ok((saved, skipped, unmatched)) => {
+                    Ok((saved, already, skipped, unmatched)) => {
                         self.status = format!(
-                            "Imported {saved} fits from Pyfa, {skipped} skipped, {unmatched} items not matched to a type"
+                            "Imported {saved} fits from Pyfa, {already} already here, {skipped} skipped, {unmatched} items not matched to a type"
                         );
                         if let Some((game, _)) = self.ready() {
                             self.saved = rufa_store::saved_fits(&game.info(), &self.config_dir)
@@ -3405,7 +3424,7 @@ mod tests {
                 .unwrap();
             saved += 1;
         }
-        let _ = app.update(Message::PyfaImported(Ok((saved, report.skipped, 1))));
+        let _ = app.update(Message::PyfaImported(Ok((saved, 0, report.skipped, 1))));
         assert_eq!(app.saved.len(), 2, "{}", app.status);
         assert!(app.saved.iter().any(|f| f.name == "Pyfa Rifter"));
         let _ = app.update(Message::OpenSaved(app.saved[0].path.clone()));
@@ -3424,7 +3443,7 @@ mod tests {
         app.status = "untouched".to_string();
         let _ = app.update(Message::ImportPyfa);
         assert_eq!(app.status, "untouched", "the second press does nothing");
-        let _ = app.update(Message::PyfaImported(Ok((0, 0, 0))));
+        let _ = app.update(Message::PyfaImported(Ok((0, 0, 0, 0))));
         assert!(!app.pyfa_pending, "the result frees the button");
         let _ = std::fs::remove_dir_all(&app.config_dir);
     }
