@@ -12,6 +12,10 @@ pub struct Settings {
     pub esi_client_id: String,
     pub ui_scale: f32,
     pub skipped_version: String,
+    /// The window as it was left. Wayland keeps its coordinates from the
+    /// client, so the size can be known while the position is not.
+    pub window_size: Option<(f32, f32)>,
+    pub window_at: Option<(f32, f32)>,
 }
 
 impl Default for Settings {
@@ -25,6 +29,8 @@ impl Default for Settings {
             esi_client_id: String::new(),
             ui_scale: 1.0,
             skipped_version: String::new(),
+            window_size: None,
+            window_at: None,
         }
     }
 }
@@ -49,6 +55,10 @@ impl Settings {
                 "esi_client_id" => s.esi_client_id = value.to_string(),
                 "ui_scale" => s.ui_scale = value.parse().unwrap_or(1.0),
                 "skipped_version" => s.skipped_version = value.to_string(),
+                "window_size" => {
+                    s.window_size = parse_pair(value).filter(|(w, h)| *w >= 100.0 && *h >= 100.0)
+                }
+                "window_at" => s.window_at = parse_pair(value),
                 _ => {}
             }
         }
@@ -57,8 +67,12 @@ impl Settings {
 
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
+        let pair = |v: Option<(f32, f32)>| match v {
+            Some((a, b)) => format!("{a:.0} {b:.0}"),
+            None => String::new(),
+        };
         let text = format!(
-            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\nskipped_version = {}\n",
+            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\nskipped_version = {}\nwindow_size = {}\nwindow_at = {}\n",
             self.skill_level,
             self.factor_reload,
             self.character,
@@ -66,9 +80,24 @@ impl Settings {
             self.fit_ratio,
             self.esi_client_id,
             self.ui_scale,
-            self.skipped_version
+            self.skipped_version,
+            pair(self.window_size),
+            pair(self.window_at)
         );
         std::fs::write(dir.join(FILE), text)
+    }
+}
+
+/// Two finite numbers on one line, or nothing.
+fn parse_pair(value: &str) -> Option<(f32, f32)> {
+    let parts: Vec<f32> = value
+        .split_whitespace()
+        .filter_map(|v| v.parse().ok())
+        .filter(|v: &f32| v.is_finite())
+        .collect();
+    match parts[..] {
+        [a, b] => Some((a, b)),
+        _ => None,
     }
 }
 
@@ -89,9 +118,31 @@ mod tests {
             esi_client_id: "abc".to_string(),
             ui_scale: 1.2,
             skipped_version: "v0.4.0".to_string(),
+            window_size: Some((1280.0, 720.0)),
+            window_at: Some((40.0, -12.0)),
         };
         written.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), written);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_pair_needs_exactly_two_numbers() {
+        assert_eq!(parse_pair("1280 720"), Some((1280.0, 720.0)));
+        assert_eq!(parse_pair("40 -12"), Some((40.0, -12.0)));
+        assert_eq!(parse_pair(""), None);
+        assert_eq!(parse_pair("1280 720 40"), None);
+    }
+
+    #[test]
+    fn a_window_too_small_to_use_is_dropped_on_load() {
+        let dir = std::env::temp_dir().join(format!("rufa-window-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(FILE), "window_size = 10 10\nwindow_at = 5 5\n").unwrap();
+        let s = Settings::load(&dir);
+        assert_eq!(s.window_size, None);
+        assert_eq!(s.window_at, Some((5.0, 5.0)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
