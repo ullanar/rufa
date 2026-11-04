@@ -63,10 +63,21 @@ fn main() -> iced::Result {
         std::thread::sleep(std::time::Duration::from_millis(200));
         return Ok(());
     }
+    // The window comes back where it was left. A first run, or a recorded
+    // place the monitors no longer offer, falls back to the centre.
+    let recorded = Settings::load(&rufa_store::config_dir());
+    let size = match recorded.window_size {
+        Some((width, height)) => iced::Size::new(width, height),
+        None => iced::Size::new(WANTED_WINDOW.0, WANTED_WINDOW.1),
+    };
+    let position = match recorded.window_at {
+        Some((x, y)) => iced::window::Position::Specific(iced::Point::new(x, y)),
+        None => iced::window::Position::Centered,
+    };
     let window = iced::window::Settings {
-        size: iced::Size::new(WANTED_WINDOW.0, WANTED_WINDOW.1),
+        size,
         min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
-        position: iced::window::Position::Centered,
+        position,
         icon: iced::window::icon::from_file_data(
             include_bytes!("../assets/icons/rufa-256.png"),
             None,
@@ -152,10 +163,15 @@ pub enum ZoomStep {
     Reset,
 }
 
-/// Asks the monitor how much room it has, once the window exists.
+/// Asks the monitor how much room it has and where the window landed, once
+/// the window exists.
 fn fit_to_monitor() -> Task<Message> {
     iced::window::latest().then(|id| match id {
-        Some(id) => iced::window::monitor_size(id).map(move |size| Message::MonitorSize(id, size)),
+        Some(id) => Task::batch([
+            iced::window::monitor_size(id).map(move |size| Message::MonitorSize(id, size)),
+            iced::window::position(id).map(Message::WindowPosition),
+            iced::window::size(id).map(Message::WindowResized),
+        ]),
         None => Task::none(),
     })
 }
@@ -178,6 +194,8 @@ pub enum Message {
     SaveSettings(u64),
     WindowResized(iced::Size),
     MonitorSize(iced::window::Id, Option<iced::Size>),
+    WindowMoved(iced::Point),
+    WindowPosition(Option<iced::Point>),
     LeftTab(LeftTab),
     ShipSearch(String),
     ShipGroup(Option<i32>),
@@ -532,6 +550,20 @@ impl App {
         };
         self.setup_dir = dir.to_string_lossy().to_string();
         self.setup_prompt = true;
+    }
+
+    /// Writes the settings once the user stops dragging. Each call cancels
+    /// the one before it.
+    fn save_settings_later(&mut self) -> Task<Message> {
+        self.settings_gen += 1;
+        let generation = self.settings_gen;
+        Task::perform(
+            async move {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                generation
+            },
+            Message::SaveSettings,
+        )
     }
 
     fn sweep_leftovers() {
@@ -895,6 +927,20 @@ impl App {
             Message::WindowResized(size) => {
                 self.window_width = size.width;
                 self.clamp_panes();
+                self.settings.window_size = Some((size.width, size.height));
+                return self.save_settings_later();
+            }
+            // Wayland keeps window coordinates from the client, so a run
+            // there records a size and no position.
+            Message::WindowMoved(point) => {
+                self.settings.window_at = Some((point.x, point.y));
+                return self.save_settings_later();
+            }
+            Message::WindowPosition(at) => {
+                if let Some(point) = at {
+                    self.settings.window_at = Some((point.x, point.y));
+                    return self.save_settings_later();
+                }
             }
             Message::PaneResized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
@@ -902,15 +948,7 @@ impl App {
                 let (browser, fit) = self.pane_ratios();
                 self.settings.browser_ratio = browser;
                 self.settings.fit_ratio = fit;
-                self.settings_gen += 1;
-                let generation = self.settings_gen;
-                return Task::perform(
-                    async move {
-                        std::thread::sleep(std::time::Duration::from_millis(400));
-                        generation
-                    },
-                    Message::SaveSettings,
-                );
+                return self.save_settings_later();
             }
             Message::SaveSettings(generation) => {
                 if generation == self.settings_gen {
@@ -1698,9 +1736,10 @@ impl App {
                 let _ = self.settings.save(&self.config_dir);
             }
             Message::MonitorSize(id, Some(monitor)) => {
-                let width = WANTED_WINDOW.0.min(monitor.width * SCREEN_SHARE);
-                let height = WANTED_WINDOW.1.min(monitor.height * SCREEN_SHARE);
-                if width < WANTED_WINDOW.0 || height < WANTED_WINDOW.1 {
+                let wanted = self.settings.window_size.unwrap_or(WANTED_WINDOW);
+                let width = wanted.0.min(monitor.width * SCREEN_SHARE);
+                let height = wanted.1.min(monitor.height * SCREEN_SHARE);
+                if width < wanted.0 || height < wanted.1 {
                     return iced::window::resize(id, iced::Size::new(width, height));
                 }
             }
@@ -2377,10 +2416,19 @@ impl App {
     fn subscription(&self) -> Subscription<Message> {
         let keys = keyboard::listen().map(Message::Key);
         let sizes = iced::window::resize_events().map(|(_, size)| Message::WindowResized(size));
+        let moves = iced::window::events().filter_map(|(_, event)| match event {
+            iced::window::Event::Moved(point) => Some(Message::WindowMoved(point)),
+            _ => None,
+        });
         if self.downloading {
-            Subscription::batch([keys, sizes, iced::window::frames().map(|_| Message::Tick)])
+            Subscription::batch([
+                keys,
+                sizes,
+                moves,
+                iced::window::frames().map(|_| Message::Tick),
+            ])
         } else {
-            Subscription::batch([keys, sizes])
+            Subscription::batch([keys, sizes, moves])
         }
     }
 
