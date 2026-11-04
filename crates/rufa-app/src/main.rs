@@ -21,6 +21,24 @@ use rufa_sim::{Fit, Slot, State, edit};
 use rufa_store::{Character, ImplantSet, PriceCache, SavedFit, Settings, TargetProfile};
 
 const MIN_WINDOW: (f32, f32) = (900.0, 600.0);
+/// What the window asks for before the monitor is known.
+const WANTED_WINDOW: (f32, f32) = (1440.0, 900.0);
+/// The share of the monitor a fresh window may take.
+const SCREEN_SHARE: f32 = 0.9;
+
+/// The zoom ladder. A step moves to the neighbour, so a step out and a step
+/// back in land on the value the run started from.
+const ZOOM: [f32; 10] = [0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5];
+
+fn zoom_step(current: f32, direction: i32) -> f32 {
+    let at = ZOOM
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| (*a - current).abs().total_cmp(&(*b - current).abs()))
+        .map(|(i, _)| i as i32)
+        .unwrap_or(3);
+    ZOOM[(at + direction).clamp(0, ZOOM.len() as i32 - 1) as usize]
+}
 const MIN_BROWSER: f32 = 160.0;
 const MIN_FIT: f32 = 300.0;
 const MIN_STATS: f32 = 200.0;
@@ -46,8 +64,9 @@ fn main() -> iced::Result {
         return Ok(());
     }
     let window = iced::window::Settings {
-        size: iced::Size::new(1440.0, 900.0),
+        size: iced::Size::new(WANTED_WINDOW.0, WANTED_WINDOW.1),
         min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
+        position: iced::window::Position::Centered,
         icon: iced::window::icon::from_file_data(
             include_bytes!("../assets/icons/rufa-256.png"),
             None,
@@ -125,6 +144,22 @@ fn same_profile(pattern: &rufa_store::DamagePattern, profile: &rufa_sim::DamageP
         && (s[3] - profile.explosive).abs() < 1e-9
 }
 
+/// One press of the zoom controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZoomStep {
+    Out,
+    In,
+    Reset,
+}
+
+/// Asks the monitor how much room it has, once the window exists.
+fn fit_to_monitor() -> Task<Message> {
+    iced::window::latest().then(|id| match id {
+        Some(id) => iced::window::monitor_size(id).map(move |size| Message::MonitorSize(id, size)),
+        None => Task::none(),
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvChoice {
     pub id: i32,
@@ -142,6 +177,7 @@ pub enum Message {
     PaneResized(pane_grid::ResizeEvent),
     SaveSettings(u64),
     WindowResized(iced::Size),
+    MonitorSize(iced::window::Id, Option<iced::Size>),
     LeftTab(LeftTab),
     ShipSearch(String),
     ShipGroup(Option<i32>),
@@ -225,7 +261,7 @@ pub enum Message {
     Tick,
     RetryDownload,
     CenterTab(CenterTab),
-    UiScale(f32),
+    Zoom(ZoomStep),
     GraphKind(GraphKind),
     GraphSignature(String),
     GraphVelocity(String),
@@ -459,7 +495,10 @@ impl App {
         if rufa_data::update::needs_download(&data_dir) {
             app.downloading = true;
             app.status = format!("Getting the game data into {}", data_dir.display());
-            return (app, download_task(data_dir));
+            return (
+                app,
+                Task::batch([download_task(data_dir), fit_to_monitor()]),
+            );
         }
         app.open_setup();
         app.load_game(&data_dir);
@@ -469,7 +508,10 @@ impl App {
             async { rufa_data::update::latest_tag().map_err(|e| e.to_string()) },
             Message::LatestTag,
         );
-        (app, Task::batch([prices, check, release_check()]))
+        (
+            app,
+            Task::batch([prices, check, release_check(), fit_to_monitor()]),
+        )
     }
 
     fn open_setup(&mut self) {
@@ -1646,10 +1688,23 @@ impl App {
             }
             Message::Key(event) => return self.on_key(event),
             Message::CenterTab(tab) => self.center = tab,
-            Message::UiScale(scale) => {
-                self.settings.ui_scale = scale.clamp(0.75, 2.5);
+            Message::Zoom(step) => {
+                let scale = self.settings.ui_scale;
+                self.settings.ui_scale = match step {
+                    ZoomStep::Reset => 1.0,
+                    ZoomStep::In => zoom_step(scale, 1),
+                    ZoomStep::Out => zoom_step(scale, -1),
+                };
                 let _ = self.settings.save(&self.config_dir);
             }
+            Message::MonitorSize(id, Some(monitor)) => {
+                let width = WANTED_WINDOW.0.min(monitor.width * SCREEN_SHARE);
+                let height = WANTED_WINDOW.1.min(monitor.height * SCREEN_SHARE);
+                if width < WANTED_WINDOW.0 || height < WANTED_WINDOW.1 {
+                    return iced::window::resize(id, iced::Size::new(width, height));
+                }
+            }
+            Message::MonitorSize(_, None) => {}
             Message::GraphKind(kind) => self.graph_kind = kind,
             Message::GraphSignature(s) => self.graph_signature = s,
             Message::TargetProfile(i) => {
@@ -2280,17 +2335,16 @@ impl App {
         };
         if modifiers.contains(Modifiers::CTRL) {
             use keyboard::key::{Code, Physical};
-            let scale = self.settings.ui_scale;
             let zoom = match physical_key {
                 Physical::Code(Code::Equal | Code::NumpadAdd | Code::NumpadEqual) => {
-                    Some(scale + 0.1)
+                    Some(ZoomStep::In)
                 }
-                Physical::Code(Code::Minus | Code::NumpadSubtract) => Some(scale - 0.1),
-                Physical::Code(Code::Digit0 | Code::Numpad0) => Some(1.0),
+                Physical::Code(Code::Minus | Code::NumpadSubtract) => Some(ZoomStep::Out),
+                Physical::Code(Code::Digit0 | Code::Numpad0) => Some(ZoomStep::Reset),
                 _ => None,
             };
-            if let Some(scale) = zoom {
-                return self.update(Message::UiScale(scale));
+            if let Some(step) = zoom {
+                return self.update(Message::Zoom(step));
             }
         }
         if !modifiers.contains(Modifiers::CTRL) {
@@ -2696,6 +2750,32 @@ mod tests {
         assert!(em > uniform, "em {em} uniform {uniform}");
         let profile = &app.docs[0].doc.fit.environment.damage_profile;
         assert!(same_profile(&app.damages[em_at], profile));
+    }
+
+    #[test]
+    fn a_zoom_step_out_and_back_lands_where_it_started() {
+        for start in ZOOM {
+            let out = zoom_step(start, -1);
+            if out == start {
+                continue;
+            }
+            assert_eq!(zoom_step(out, 1), start, "from {start} through {out}");
+        }
+    }
+
+    #[test]
+    fn the_zoom_ladder_stops_at_both_ends() {
+        let low = ZOOM[0];
+        let high = ZOOM[ZOOM.len() - 1];
+        assert_eq!(zoom_step(low, -1), low);
+        assert_eq!(zoom_step(high, 1), high);
+        assert_eq!(zoom_step(low, 1), ZOOM[1]);
+    }
+
+    #[test]
+    fn a_scale_off_the_ladder_snaps_to_its_neighbour() {
+        assert_eq!(zoom_step(1.04, 1), 1.1);
+        assert_eq!(zoom_step(1.04, -1), 0.9);
     }
 
     fn release(tag: &str) -> rufa_data::update::Release {
