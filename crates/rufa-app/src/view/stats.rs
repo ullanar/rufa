@@ -14,10 +14,13 @@ pub fn view(app: &App) -> El<'_> {
             .center(Length::Fill)
             .into();
     };
-    responsive(move |size| stats_body(app, doc, size.width < 300.0)).into()
+    responsive(move |size| stats_body(app, doc, size.width)).into()
 }
 
-fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
+fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
+    // The list keeps a strip for the scrollbar and every section insets its
+    // body, so a row sees less than the pane is wide.
+    let avail = pane - SCROLL_STRIP - 2.0 * ui::PAD;
     let s = &doc.doc.stats;
     let cap = &s.capacitor;
     let cap_head = if cap.stable_pct > 0.0 {
@@ -30,13 +33,13 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             "Resources",
             None,
             app.stats_folded.contains("Resources"),
-            resources(s, narrow),
+            resources(s, avail),
         ),
         ui::section(
             "Defense",
             Some(fmt::num(s.defense.ehp, 0)),
             app.stats_folded.contains("Defense"),
-            defense(app, s, narrow),
+            defense(app, s, avail),
         ),
     ]
     .spacing(ui::GAP_ROW);
@@ -46,7 +49,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             "Offense",
             Some(fmt::num(dps, 1)),
             app.stats_folded.contains("Offense"),
-            offense(app, doc, s, narrow),
+            offense(app, doc, s, avail),
         ));
     }
     if s.remote.any() {
@@ -60,7 +63,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             Some(head),
             theme::SUCCESS_TEXT,
             app.stats_folded.contains("Remote reps"),
-            remote(s, narrow),
+            remote(s, avail),
         ));
     }
     if s.mining.any() {
@@ -68,7 +71,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             "Mining",
             Some(format!("{} m3/s", fmt::num(s.mining.total(), 2))),
             app.stats_folded.contains("Mining"),
-            mining(s, narrow),
+            mining(s, avail),
         ));
     }
     col = col.extend([
@@ -76,26 +79,26 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
             "Capacitor",
             Some(cap_head),
             app.stats_folded.contains("Capacitor"),
-            capacitor(doc, s, narrow),
+            capacitor(doc, s, avail),
         ),
         ui::section(
             "Navigation",
             Some(format!("{} m/s", fmt::num(s.navigation.max_velocity, 0))),
             app.stats_folded.contains("Navigation"),
-            navigation(s, narrow),
+            navigation(s, avail),
         ),
         ui::section(
             "Targeting",
             Some(fmt::distance(s.targeting.max_range)),
             app.stats_folded.contains("Targeting"),
-            targeting(s, narrow),
+            targeting(s, avail),
         ),
         ui::section(
             "Price",
             app.fit_price(doc)
                 .map(|price| format!("{} ISK", fmt::short(price.hull))),
             app.stats_folded.contains("Price"),
-            price(app, doc, narrow),
+            price(app, doc, avail),
         ),
     ]);
     if let Some(item) = app.selected_item.filter(|i| *i < doc.doc.fit.items.len()) {
@@ -122,13 +125,13 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
     .into()
 }
 
-fn resources(s: &Stats, narrow: bool) -> El<'_> {
+fn resources(s: &Stats, avail: f32) -> El<'_> {
     let r = &s.resources;
     let mut col = column![
-        ui::gauge(narrow, "CPU", r.cpu_used, r.cpu_total, "tf"),
-        ui::gauge(narrow, "Powergrid", r.power_used, r.power_total, "MW"),
+        ui::gauge(avail, "CPU", r.cpu_used, r.cpu_total, "tf"),
+        ui::gauge(avail, "Powergrid", r.power_used, r.power_total, "MW"),
         ui::gauge(
-            narrow,
+            avail,
             "Calibration",
             r.calibration_used,
             r.calibration_total,
@@ -138,52 +141,46 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
     .spacing(3);
     if r.drone_bay_total > 0.0 || r.drone_bay_used > 0.0 {
         col = col.push(ui::gauge(
-            narrow,
+            avail,
             "Drone bandwidth",
             r.drone_bandwidth_used,
             r.drone_bandwidth_total,
             "Mbit/s",
         ));
         col = col.push(ui::gauge(
-            narrow,
+            avail,
             "Drone bay",
             r.drone_bay_used,
             r.drone_bay_total,
             "m3",
         ));
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Drones in space",
             format!("{} / {}", r.drones_active, r.drones_max),
         ));
     }
     col = col.push(ui::stat_row(
-        narrow,
+        avail,
         "Turret slots free",
         r.turrets_free.to_string(),
     ));
     col = col.push(ui::stat_row(
-        narrow,
+        avail,
         "Launcher slots free",
         r.launchers_free.to_string(),
     ));
-    col = col.push(ui::gauge(
-        narrow,
-        "Cargo",
-        r.cargo_used,
-        r.cargo_total,
-        "m3",
-    ));
+    col = col.push(ui::gauge(avail, "Cargo", r.cargo_used, r.cargo_total, "m3"));
     if r.fighter_bay_total > 0.0 {
         col = col.push(ui::gauge(
-            narrow,
+            avail,
             "Fighter bay",
             r.fighter_bay_used,
             r.fighter_bay_total,
             "m3",
         ));
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Fighter tubes",
             format!("{} / {}", r.fighter_tubes_used, r.fighter_tubes_total),
         ));
@@ -193,7 +190,7 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
             continue;
         }
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             name,
             format!("{} m3", fmt::num(size, 0)),
         ));
@@ -201,9 +198,37 @@ fn resources(s: &Stats, narrow: bool) -> El<'_> {
     col.into()
 }
 
-fn resist_cell<'a>(resonance: f64, color: Color, narrow: bool) -> El<'a> {
+/// What the scrollbar takes off the pane.
+const SCROLL_STRIP: f32 = 10.0;
+
+/// The first column of a defense row, and the last one.
+const LAYER_NAME: f32 = 72.0;
+const LAYER_VALUE: f32 = 48.0;
+
+/// How much of the resist block a defense row has room for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Resists {
+    Percents,
+    Bars,
+    Hidden,
+}
+
+/// Four cells share what the name and the total leave behind. A cell narrower
+/// than a bar is worse than no cell, so the block goes away instead.
+fn resists(avail: f32) -> Resists {
+    let cell = (avail - LAYER_NAME - LAYER_VALUE - 5.0 * ui::GAP) / 4.0;
+    if cell >= 32.0 {
+        Resists::Percents
+    } else if cell >= 20.0 {
+        Resists::Bars
+    } else {
+        Resists::Hidden
+    }
+}
+
+fn resist_cell<'a>(resonance: f64, color: Color, percent: bool) -> El<'a> {
     let resist = (1.0 - resonance).clamp(0.0, 1.0);
-    if narrow {
+    if !percent {
         return ui::bar(resist as f32, color, 5.0);
     }
     column![
@@ -224,8 +249,8 @@ fn resist_cell<'a>(resonance: f64, color: Color, narrow: bool) -> El<'a> {
     .into()
 }
 
-fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool, ehp: bool) -> El<'a> {
-    row![
+fn layer_row<'a>(name: &'static str, l: &Layer, avail: f32, ehp: bool) -> El<'a> {
+    let mut line = row![
         container(
             text(name)
                 .size(ui::SMALL)
@@ -233,24 +258,33 @@ fn layer_row<'a>(name: &'static str, l: &Layer, narrow: bool, ehp: bool) -> El<'
                 .wrapping(text::Wrapping::None)
         )
         .clip(true)
-        .width(72),
-        resist_cell(l.em, theme::EM, narrow),
-        resist_cell(l.thermal, theme::THERMAL, narrow),
-        resist_cell(l.kinetic, theme::KINETIC, narrow),
-        resist_cell(l.explosive, theme::EXPLOSIVE, narrow),
+        .width(LAYER_NAME),
+    ]
+    .spacing(ui::GAP)
+    .align_y(iced::Alignment::Center);
+    let mode = resists(avail);
+    if mode != Resists::Hidden {
+        for (resonance, color) in [
+            (l.em, theme::EM),
+            (l.thermal, theme::THERMAL),
+            (l.kinetic, theme::KINETIC),
+            (l.explosive, theme::EXPLOSIVE),
+        ] {
+            line = line.push(resist_cell(resonance, color, mode == Resists::Percents));
+        }
+    }
+    line.push(
         text(fmt::short(if ehp { l.ehp } else { l.hp }))
             .size(ui::SMALL)
             .font(theme::UI_MEDIUM)
             .color(theme::TEXT)
-            .width(48)
+            .width(LAYER_VALUE)
             .align_x(iced::alignment::Horizontal::Right),
-    ]
-    .spacing(ui::GAP)
-    .align_y(iced::Alignment::Center)
+    )
     .into()
 }
 
-fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
+fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
     let d = &s.defense;
     let patterns: Vec<DamageChoice> = app
         .damages
@@ -280,27 +314,36 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     let head = |name: &'static str, color: Color| {
-        ui::label(name)
-            .color(color)
+        container(ui::label(name).color(color))
+            .clip(true)
             .width(Length::Fill)
             .align_x(iced::alignment::Horizontal::Center)
     };
-    let header = row![
+    let mut header = row![
         container(ui::segmented(vec![
             ("HP".to_string(), !app.show_ehp, Message::ShowEhp(false)),
             ("EHP".to_string(), app.show_ehp, Message::ShowEhp(true)),
         ]))
-        .width(72),
-        head("EM", theme::EM),
-        head("TH", theme::THERMAL),
-        head("KI", theme::KINETIC),
-        head("EX", theme::EXPLOSIVE),
-        ui::label(if app.show_ehp { "EHP" } else { "HP" })
-            .width(48)
-            .align_x(iced::alignment::Horizontal::Right),
+        .clip(true)
+        .width(LAYER_NAME),
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
+    if resists(avail) != Resists::Hidden {
+        for (name, color) in [
+            ("EM", theme::EM),
+            ("TH", theme::THERMAL),
+            ("KI", theme::KINETIC),
+            ("EX", theme::EXPLOSIVE),
+        ] {
+            header = header.push(head(name, color));
+        }
+    }
+    let header = header.push(
+        ui::label(if app.show_ehp { "EHP" } else { "HP" })
+            .width(LAYER_VALUE)
+            .align_x(iced::alignment::Horizontal::Right),
+    );
     // One number in the unit the pane is set to, the way Pyfa does it. Two
     // numbers side by side read as two different facts, which they are not.
     let rep = |name: &'static str, raw: f64, effective: f64| -> El<'a> {
@@ -312,20 +355,20 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
         } else {
             format!("{} HP/s", fmt::num(raw, 1))
         };
-        ui::stat_row(narrow, name, shown)
+        ui::stat_row(avail, name, shown)
     };
     let mut col = column![
         presets.wrap(),
         header,
         column![
-            layer_row("Shield", &d.shield, narrow, app.show_ehp),
-            layer_row("Armor", &d.armor, narrow, app.show_ehp),
-            layer_row("Hull", &d.hull, narrow, app.show_ehp),
+            layer_row("Shield", &d.shield, avail, app.show_ehp),
+            layer_row("Armor", &d.armor, avail, app.show_ehp),
+            layer_row("Hull", &d.hull, avail, app.show_ehp),
         ]
         .spacing(6),
         ui::rule(),
         ui::stat_row(
-            narrow,
+            avail,
             "Shield recharge",
             fmt::seconds(d.shield_recharge_time)
         ),
@@ -361,7 +404,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
             continue;
         }
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             name,
             format!("{} HP/s", fmt::num(value, 1)),
             theme::SUCCESS_TEXT,
@@ -378,7 +421,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
                 continue;
             }
             col = col.push(ui::stat_row_colored(
-                narrow,
+                avail,
                 name,
                 format!("{} HP/s", fmt::num(held, 1)),
                 theme::WARNING_TEXT,
@@ -412,7 +455,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, narrow: bool) -> El<'a> {
     col.into()
 }
 
-fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
+fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
     let o = &s.offense;
     let target = app.graph_target();
     let applied = app
@@ -469,7 +512,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
         } else {
             format!("{} dps", fmt::num(weapons, 1))
         };
-        col = col.push(ui::stat_row(narrow, "Guns", shown));
+        col = col.push(ui::stat_row(avail, "Guns", shown));
     }
     for (name, value, unit) in [
         ("Guns with reload", o.weapons_with_reload(), "dps"),
@@ -481,7 +524,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
             continue;
         }
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             name,
             format!("{} {unit}", fmt::num(value, 1)),
         ));
@@ -501,13 +544,13 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, narrow: bool) ->
     col.into()
 }
 
-fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
+fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
     let r = &s.remote;
     let hp = |value: f64| format!("{} HP/s", fmt::num(value, 1));
     let mut col = column![].spacing(3);
     if r.shield > 0.0 {
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Shield",
             hp(r.shield),
             theme::SUCCESS_TEXT,
@@ -524,7 +567,7 @@ fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
             hp(r.armor)
         };
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Armor",
             shown,
             theme::SUCCESS_TEXT,
@@ -532,7 +575,7 @@ fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
     }
     if r.hull > 0.0 {
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Hull",
             hp(r.hull),
             theme::SUCCESS_TEXT,
@@ -540,18 +583,18 @@ fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
     }
     if r.capacitor > 0.0 {
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Capacitor",
             format!("{} GJ/s", fmt::num(r.capacitor, 1)),
             theme::SUCCESS_TEXT,
         ));
     }
     if r.range > 0.0 {
-        col = col.push(ui::stat_row(narrow, "Range", fmt::distance(r.range)));
+        col = col.push(ui::stat_row(avail, "Range", fmt::distance(r.range)));
     }
     if r.drain > 0.0 {
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Capacitor used",
             format!("{} GJ/s", fmt::num(r.drain, 1)),
         ));
@@ -559,24 +602,24 @@ fn remote<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
     col.into()
 }
 
-fn mining<'a>(s: &'a Stats, narrow: bool) -> El<'a> {
+fn mining<'a>(s: &'a Stats, avail: f32) -> El<'a> {
     let m = &s.mining;
     let rate = |value: f64| format!("{} m3/s", fmt::num(value, 2));
     let mut col = column![].spacing(3);
     if m.miner > 0.0 {
-        col = col.push(ui::stat_row(narrow, "Miners", rate(m.miner)));
+        col = col.push(ui::stat_row(avail, "Miners", rate(m.miner)));
     }
     if m.drone > 0.0 {
-        col = col.push(ui::stat_row(narrow, "Drones", rate(m.drone)));
+        col = col.push(ui::stat_row(avail, "Drones", rate(m.drone)));
     }
     col = col.push(ui::stat_row(
-        narrow,
+        avail,
         "Per hour",
         format!("{} m3", fmt::num(m.per_hour(), 0)),
     ));
     if m.drain > 0.0 {
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Capacitor used",
             format!("{} GJ/s", fmt::num(m.drain, 1)),
         ));
@@ -617,7 +660,7 @@ fn small_owned<'a>(s: String) -> text::Text<'a> {
     text(s).size(ui::SMALL).color(theme::TEXT_SECONDARY)
 }
 
-fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
+fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
     let c = &s.capacitor;
     let sim = &doc.doc.cap;
     // One verdict, from the simulation. The rows under it are the inputs that
@@ -659,19 +702,15 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
             4.0
         ),
         ui::rule(),
+        ui::stat_row(avail, "Capacity", format!("{} GJ", fmt::num(c.capacity, 1))),
+        ui::stat_row(avail, "Recharge", fmt::seconds(c.recharge_time)),
         ui::stat_row(
-            narrow,
-            "Capacity",
-            format!("{} GJ", fmt::num(c.capacity, 1))
-        ),
-        ui::stat_row(narrow, "Recharge", fmt::seconds(c.recharge_time)),
-        ui::stat_row(
-            narrow,
+            avail,
             "Peak recharge",
             format!("{} GJ/s", fmt::num(c.peak_recharge, 2))
         ),
         ui::stat_row(
-            narrow,
+            avail,
             "Modules draw",
             format!("{} GJ/s", fmt::num(c.peak_load, 2))
         ),
@@ -681,14 +720,14 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     // numbers the verdict came from.
     if s.incoming.capacitor > 0.0 {
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Incoming capacitor",
             format!("+{} GJ/s", fmt::num(s.incoming.capacitor, 2)),
             theme::SUCCESS_TEXT,
         ));
     }
     col.push(ui::stat_row_colored(
-        narrow,
+        avail,
         "Left over",
         format!(
             "{}{} GJ/s",
@@ -700,32 +739,32 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, narrow: bool) -> El<'a> {
     .into()
 }
 
-fn navigation(s: &Stats, narrow: bool) -> El<'_> {
+fn navigation(s: &Stats, avail: f32) -> El<'_> {
     let n = &s.navigation;
     let mut col = column![
         ui::stat_row(
-            narrow,
+            avail,
             "Max velocity",
             format!("{} m/s", fmt::num(n.max_velocity, 1))
         ),
-        ui::stat_row(narrow, "Align time", fmt::seconds(n.align_time)),
+        ui::stat_row(avail, "Align time", fmt::seconds(n.align_time)),
         ui::stat_row(
-            narrow,
+            avail,
             "Signature radius",
             format!("{} m", fmt::num(n.signature_radius, 1))
         ),
         ui::stat_row(
-            narrow,
+            avail,
             "Warp speed",
             format!("{} AU/s", fmt::num(n.warp_speed, 2))
         ),
-        ui::stat_row(narrow, "Mass", format!("{} kg", fmt::short(n.mass))),
-        ui::stat_row(narrow, "Agility", fmt::num(n.agility, 3)),
+        ui::stat_row(avail, "Mass", format!("{} kg", fmt::short(n.mass))),
+        ui::stat_row(avail, "Agility", fmt::num(n.agility, 3)),
     ]
     .spacing(2);
     if n.max_warp_distance > 0.0 {
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Max warp distance",
             format!("{} AU", fmt::num(n.max_warp_distance, 1)),
         ));
@@ -733,19 +772,19 @@ fn navigation(s: &Stats, narrow: bool) -> El<'_> {
     col.into()
 }
 
-fn targeting(s: &Stats, narrow: bool) -> El<'_> {
+fn targeting(s: &Stats, avail: f32) -> El<'_> {
     let t = &s.targeting;
     let mut col = column![
-        ui::stat_row(narrow, "Sensor", t.sensor_type.to_string()),
-        ui::stat_row(narrow, "Max targets", format!("{}", t.max_targets)),
-        ui::stat_row(narrow, "Targeting range", fmt::distance(t.max_range)),
+        ui::stat_row(avail, "Sensor", t.sensor_type.to_string()),
+        ui::stat_row(avail, "Max targets", format!("{}", t.max_targets)),
+        ui::stat_row(avail, "Targeting range", fmt::distance(t.max_range)),
         ui::stat_row(
-            narrow,
+            avail,
             "Scan resolution",
             format!("{} mm", fmt::num(t.scan_resolution, 0))
         ),
         ui::stat_row(
-            narrow,
+            avail,
             "Sensor strength",
             format!("{} points", fmt::num(t.sensor_strength, 1))
         ),
@@ -753,14 +792,14 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
     .spacing(2);
     if t.drone_control_range > 0.0 {
         col = col.push(ui::stat_row(
-            narrow,
+            avail,
             "Drone control range",
             fmt::distance(t.drone_control_range),
         ));
     }
     if t.jam_chance > 0.0 {
         col = col.push(ui::stat_row_colored(
-            narrow,
+            avail,
             "Chance to be jammed",
             format!("{}%", fmt::num(t.jam_chance, 1)),
             theme::DANGER_TEXT,
@@ -773,7 +812,7 @@ fn targeting(s: &Stats, narrow: bool) -> El<'_> {
     col.into()
 }
 
-fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
+fn price<'a>(app: &'a App, doc: &'a crate::Doc, avail: f32) -> El<'a> {
     let fit = &doc.doc.fit;
     let isk = |v: Option<f64>| {
         v.map(|v| format!("{} ISK", fmt::short(v)))
@@ -806,12 +845,12 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, narrow: bool) -> El<'a> {
         "Jita sell, cached a day"
     };
     column![
-        ui::stat_row(narrow, "Hull", isk(hull)),
-        ui::stat_row(narrow, "Modules", isk(Some(modules))),
-        ui::stat_row(narrow, "Drones", isk(Some(drones))),
-        ui::stat_row(narrow, "Cargo", isk(Some(cargo))),
+        ui::stat_row(avail, "Hull", isk(hull)),
+        ui::stat_row(avail, "Modules", isk(Some(modules))),
+        ui::stat_row(avail, "Drones", isk(Some(drones))),
+        ui::stat_row(avail, "Cargo", isk(Some(cargo))),
         ui::rule(),
-        ui::stat_row(narrow, "In the head", isk(Some(head))),
+        ui::stat_row(avail, "In the head", isk(Some(head))),
         row![
             text(status)
                 .size(ui::MICRO)
@@ -1239,4 +1278,25 @@ fn short_names(variants: &[&rufa_data::TypeRef]) -> Vec<String> {
             ui::clip(&name, 9)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_defense_row_drops_the_percent_then_the_bars() {
+        // Pane width, minus the scrollbar strip and the section inset.
+        let avail = |pane: f32| pane - SCROLL_STRIP - 2.0 * ui::PAD;
+        assert_eq!(resists(avail(400.0)), Resists::Percents);
+        assert_eq!(resists(avail(300.0)), Resists::Percents);
+        assert_eq!(resists(avail(260.0)), Resists::Bars);
+        assert_eq!(resists(avail(200.0)), Resists::Hidden);
+    }
+
+    #[test]
+    fn a_stat_row_keeps_one_line_while_both_halves_fit() {
+        assert!(ui::one_line(280.0, "Shield recharge", "7m 49s"));
+        assert!(!ui::one_line(120.0, "Shield recharge", "7m 49s"));
+    }
 }
