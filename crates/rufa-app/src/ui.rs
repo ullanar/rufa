@@ -260,12 +260,18 @@ pub fn rule<'a>() -> El<'a> {
         .into()
 }
 
-pub fn stat_row<'a>(narrow: bool, name: &'a str, shown: String) -> El<'a> {
-    stat_row_colored(narrow, name, shown, theme::TEXT)
+/// Name and value share a line while both fit the pane. The value drops
+/// under the name only when it would otherwise be cut.
+pub fn one_line(avail: f32, name: &str, shown: &str) -> bool {
+    width(name, SMALL) + width(shown, VALUE) + GAP_ROW + PAD <= avail
 }
 
-pub fn stat_row_colored<'a>(narrow: bool, name: &'a str, shown: String, color: Color) -> El<'a> {
-    if narrow {
+pub fn stat_row<'a>(avail: f32, name: &'a str, shown: String) -> El<'a> {
+    stat_row_colored(avail, name, shown, theme::TEXT)
+}
+
+pub fn stat_row_colored<'a>(avail: f32, name: &'a str, shown: String, color: Color) -> El<'a> {
+    if !one_line(avail, name, &shown) {
         return column![
             small(name),
             container(value_colored(shown, color))
@@ -399,7 +405,7 @@ pub fn split_bar<'a>(parts: [f64; 4], colors: [Color; 4], height: f32) -> El<'a>
         .into()
 }
 
-pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
+pub fn gauge<'a>(avail: f32, name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
     let fraction = if total > 0.0 {
         (used / total) as f32
     } else if used > 0.0 {
@@ -428,7 +434,9 @@ pub fn gauge<'a>(narrow: bool, name: &'a str, used: f64, total: f64, unit: &'sta
             .align_y(iced::Alignment::Center),
     )
     .clip(true);
-    let head: El<'a> = if narrow {
+    // The percent sits beside the name, so it counts against the same line.
+    let room = avail - width("100%", MICRO) - GAP;
+    let head: El<'a> = if !one_line(room, name, &shown) {
         column![
             named.width(Length::Fill),
             container(value_colored(shown, text_color))

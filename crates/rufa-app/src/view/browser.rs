@@ -348,8 +348,8 @@ fn duplicate_panel(app: &App) -> El<'_> {
         column![
             head,
             ui::rule(),
-            ui::stat_row(false, "Fits with copies", count(fits)),
-            ui::stat_row(false, "Each fit keeps", "1".to_string()),
+            ui::stat_row(f32::INFINITY, "Fits with copies", count(fits)),
+            ui::stat_row(f32::INFINITY, "Each fit keeps", "1".to_string()),
             row![
                 button(text(format!("Delete {} files", count(going))).size(ui::SMALL))
                     .padding(ui::pill(ui::PAD))
