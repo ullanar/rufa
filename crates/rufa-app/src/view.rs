@@ -518,14 +518,14 @@ fn status_bar(app: &App) -> El<'_> {
         button(text("−").size(ui::SMALL))
             .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
-            .on_press(Message::UiScale(scale - 0.1)),
+            .on_press(Message::Zoom(crate::ZoomStep::Out)),
     );
     bar = bar.push(ui::small(format!("{:.0}%", scale * 100.0)));
     bar = bar.push(
         button(text("+").size(ui::SMALL))
             .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
-            .on_press(Message::UiScale(scale + 0.1)),
+            .on_press(Message::Zoom(crate::ZoomStep::In)),
     );
     bar = bar.push(
         button(text("Check for updates").size(ui::SMALL))
