@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.0](https://github.com/ullanar/rufa/compare/v0.6.1...v0.7.0) (2026-11-06)
+
+
+### Features
+
+* **app:** a second Pyfa import brings only the new fits ([c2f5c0f](https://github.com/ullanar/rufa/commit/c2f5c0fcbe633f6c7171d9c213e4d4d433d82e6e))
+* **app:** every row of a fit names its price ([4a383f7](https://github.com/ullanar/rufa/commit/4a383f72b8d82871eefb6c1a01de4cfeb8852fa3))
+* **app:** find the duplicate fits and delete them in one step ([33e5006](https://github.com/ullanar/rufa/commit/33e5006fdc651132b70ae1db093275d7b1934c90))
+* **app:** the window comes back the size and place it was left ([33bdd7c](https://github.com/ullanar/rufa/commit/33bdd7c125910fe26d42d606455d84656d81d3fe))
+* **sim:** a projected transmitter feeds the capacitor run ([8072eea](https://github.com/ullanar/rufa/commit/8072eeac18fa93cd22bb947fedd9f24fc88a0662))
+* **sim:** cap boosters inject and a clip reloads in the capacitor run ([d3f48cd](https://github.com/ullanar/rufa/commit/d3f48cd9aff3a38c51d22b0aa99de8fb47616b78))
+* **store:** damage patterns come from a file, not a fixed list ([1c45971](https://github.com/ullanar/rufa/commit/1c45971094045f114f7853079054e91d6729d8af))
+
+
+### Bug Fixes
+
+* **app:** a fit row measures its text in pixels, not characters ([28cb8c1](https://github.com/ullanar/rufa/commit/28cb8c1954d9052954038ff46b7790b8d983a361))
+* **app:** a running Pyfa import refuses a second press ([c79621f](https://github.com/ullanar/rufa/commit/c79621f9def740eef07d6d7c25bb3621190753dd))
+* **app:** the stats pane folds a row only when it stops fitting ([63a8b79](https://github.com/ullanar/rufa/commit/63a8b7900cd8ddc47581f453d83022f41cbb0a21))
+* **app:** zoom walks a ladder and a fresh window fits the monitor ([ac7650a](https://github.com/ullanar/rufa/commit/ac7650a90bb8a03686e72de1edb206b67bcb81b2))
+
 ## [0.6.1](https://github.com/ullanar/rufa/compare/v0.6.0...v0.6.1) (2026-11-02)
 
 
