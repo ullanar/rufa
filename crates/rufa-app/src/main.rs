@@ -2396,7 +2396,7 @@ impl App {
             "c" => Message::CopyEft,
             "v" => Message::PasteEft,
             "w" => Message::CloseTab(self.active),
-            "g" if modifiers.contains(Modifiers::SHIFT) => Message::Graph(GraphMsg::NextKind),
+            "g" | "G" if modifiers.contains(Modifiers::SHIFT) => Message::Graph(GraphMsg::NextKind),
             "g" => Message::CenterTab(CenterTab::Graph),
             _ => return Task::none(),
         };
