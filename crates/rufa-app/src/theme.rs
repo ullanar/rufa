@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use iced::border::Radius;
 use iced::font::{Family, Stretch, Weight};
-use iced::theme::Palette;
+use iced::theme::palette::Seed;
 use iced::widget::{button, container, pick_list, scrollable, slider, text_input};
 use iced::{Background, Border, Color, Font, Theme};
 
@@ -102,7 +102,7 @@ pub const FONTS: [&[u8]; 4] = [
 static RUFA: LazyLock<Theme> = LazyLock::new(|| {
     Theme::custom(
         "Rufa",
-        Palette {
+        Seed {
             background: BASE,
             text: TEXT,
             primary: ACCENT,
@@ -369,7 +369,6 @@ pub fn input(_theme: &Theme, status: text_input::Status) -> text_input::Style {
             width: 1.0,
             radius: Radius::new(4.0),
         },
-        icon: MUTED,
         placeholder: FAINT,
         value: TEXT,
         selection: ACCENT_WASH,

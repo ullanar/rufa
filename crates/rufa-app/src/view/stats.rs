@@ -1,3 +1,4 @@
+use iced::widget::Widget;
 use iced::widget::{button, column, container, pick_list, responsive, row, slider, space, text};
 use iced::{Color, Length};
 use rufa_data::Info;
@@ -5,6 +6,7 @@ use rufa_sim::stats::{Layer, Stats};
 
 use crate::fmt;
 use crate::theme;
+use crate::ui::Add;
 use crate::ui::{self, El};
 use crate::{App, DamageChoice, Message};
 
@@ -12,9 +14,9 @@ pub fn view(app: &App) -> El<'_> {
     let Some(doc) = app.docs.get(app.active) else {
         return container(ui::muted("No fit open"))
             .center(Length::Fill)
-            .into();
+            .boxed();
     };
-    responsive(move |size| stats_body(app, doc, size.width)).into()
+    responsive(move |size| stats_body(app, doc, size.width)).boxed()
 }
 
 fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
@@ -45,7 +47,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
     .spacing(ui::GAP_ROW);
     let dps = s.offense.dps;
     if dps > 0.0 {
-        col = col.push(ui::section(
+        col = col.add(ui::section(
             "Offense",
             Some(fmt::num(dps, 1)),
             app.stats_folded.contains("Offense"),
@@ -58,7 +60,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
         } else {
             format!("{} GJ/s", fmt::num(s.remote.capacitor, 1))
         };
-        col = col.push(ui::section_colored(
+        col = col.add(ui::section_colored(
             "Remote reps",
             Some(head),
             theme::SUCCESS_TEXT,
@@ -67,7 +69,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
         ));
     }
     if s.mining.any() {
-        col = col.push(ui::section(
+        col = col.add(ui::section(
             "Mining",
             Some(format!("{} m3/s", fmt::num(s.mining.total(), 2))),
             app.stats_folded.contains("Mining"),
@@ -108,7 +110,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
         } else {
             ("Selected item", None)
         };
-        col = col.push(ui::section(
+        col = col.add(ui::section(
             name,
             headline,
             app.stats_folded.contains(name),
@@ -122,7 +124,7 @@ fn stats_body<'a>(app: &'a App, doc: &'a crate::Doc, pane: f32) -> El<'a> {
         left: 0.0,
     }))
     .height(Length::Fill)
-    .into()
+    .boxed()
 }
 
 fn resources(s: &Stats, avail: f32) -> El<'_> {
@@ -140,46 +142,46 @@ fn resources(s: &Stats, avail: f32) -> El<'_> {
     ]
     .spacing(3);
     if r.drone_bay_total > 0.0 || r.drone_bay_used > 0.0 {
-        col = col.push(ui::gauge(
+        col = col.add(ui::gauge(
             avail,
             "Drone bandwidth",
             r.drone_bandwidth_used,
             r.drone_bandwidth_total,
             "Mbit/s",
         ));
-        col = col.push(ui::gauge(
+        col = col.add(ui::gauge(
             avail,
             "Drone bay",
             r.drone_bay_used,
             r.drone_bay_total,
             "m3",
         ));
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Drones in space",
             format!("{} / {}", r.drones_active, r.drones_max),
         ));
     }
-    col = col.push(ui::stat_row(
+    col = col.add(ui::stat_row(
         avail,
         "Turret slots free",
         r.turrets_free.to_string(),
     ));
-    col = col.push(ui::stat_row(
+    col = col.add(ui::stat_row(
         avail,
         "Launcher slots free",
         r.launchers_free.to_string(),
     ));
-    col = col.push(ui::gauge(avail, "Cargo", r.cargo_used, r.cargo_total, "m3"));
+    col = col.add(ui::gauge(avail, "Cargo", r.cargo_used, r.cargo_total, "m3"));
     if r.fighter_bay_total > 0.0 {
-        col = col.push(ui::gauge(
+        col = col.add(ui::gauge(
             avail,
             "Fighter bay",
             r.fighter_bay_used,
             r.fighter_bay_total,
             "m3",
         ));
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Fighter tubes",
             format!("{} / {}", r.fighter_tubes_used, r.fighter_tubes_total),
@@ -189,13 +191,13 @@ fn resources(s: &Stats, avail: f32) -> El<'_> {
         if size <= 0.0 {
             continue;
         }
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             name,
             format!("{} m3", fmt::num(size, 0)),
         ));
     }
-    col.into()
+    col.boxed()
 }
 
 /// What the scrollbar takes off the pane.
@@ -246,7 +248,7 @@ fn resist_cell<'a>(resonance: f64, color: Color, percent: bool) -> El<'a> {
     ]
     .spacing(2)
     .width(Length::Fill)
-    .into()
+    .boxed()
 }
 
 fn layer_row<'a>(name: &'static str, l: &Layer, avail: f32, ehp: bool) -> El<'a> {
@@ -270,10 +272,10 @@ fn layer_row<'a>(name: &'static str, l: &Layer, avail: f32, ehp: bool) -> El<'a>
             (l.kinetic, theme::KINETIC),
             (l.explosive, theme::EXPLOSIVE),
         ] {
-            line = line.push(resist_cell(resonance, color, mode == Resists::Percents));
+            line = line.add(resist_cell(resonance, color, mode == Resists::Percents));
         }
     }
-    line.push(
+    line.add(
         text(fmt::short(if ehp { l.ehp } else { l.hp }))
             .size(ui::SMALL)
             .font(theme::UI_MEDIUM)
@@ -281,7 +283,7 @@ fn layer_row<'a>(name: &'static str, l: &Layer, avail: f32, ehp: bool) -> El<'a>
             .width(LAYER_VALUE)
             .align_x(iced::alignment::Horizontal::Right),
     )
-    .into()
+    .boxed()
 }
 
 fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
@@ -305,7 +307,8 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
     });
     let presets = row![
         ui::label("DAMAGE"),
-        pick_list(patterns, current, Message::DamagePattern)
+        pick_list(current, patterns, ToString::to_string)
+            .on_select(Message::DamagePattern)
             .placeholder("Custom")
             .text_size(ui::MICRO)
             .padding(ui::field(2.0, 6.0))
@@ -336,10 +339,10 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
             ("KI", theme::KINETIC),
             ("EX", theme::EXPLOSIVE),
         ] {
-            header = header.push(head(name, color));
+            header = header.add(head(name, color));
         }
     }
-    let header = header.push(
+    let header = header.add(
         ui::label(if app.show_ehp { "EHP" } else { "HP" })
             .width(LAYER_VALUE)
             .align_x(iced::alignment::Horizontal::Right),
@@ -348,7 +351,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
     // numbers side by side read as two different facts, which they are not.
     let rep = |name: &'static str, raw: f64, effective: f64| -> El<'a> {
         if raw <= 0.0 && effective <= 0.0 {
-            return space().height(0).into();
+            return space().height(0).boxed();
         }
         let shown = if app.show_ehp {
             format!("{} EHP/s", fmt::num(effective, 1))
@@ -403,7 +406,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
         if value <= 0.0 {
             continue;
         }
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             name,
             format!("{} HP/s", fmt::num(value, 1)),
@@ -420,7 +423,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
             if burst <= 0.0 {
                 continue;
             }
-            col = col.push(ui::stat_row_colored(
+            col = col.add(ui::stat_row_colored(
                 avail,
                 name,
                 format!("{} HP/s", fmt::num(held, 1)),
@@ -429,7 +432,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
         }
     }
     if d.bombs.iter().any(|count| *count > 0.0) {
-        let mut line = row![].spacing(ui::GAP_ROW);
+        let mut line = ui::line().spacing(ui::GAP_ROW);
         let names = ["Electron", "Scorch", "Concussion", "Shrapnel"];
         for ((name, count), color) in names.iter().zip(d.bombs).zip([
             theme::EM,
@@ -437,7 +440,7 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
             theme::KINETIC,
             theme::EXPLOSIVE,
         ]) {
-            line = line.push(
+            line = line.add(
                 row![
                     container(space().width(6).height(6)).style(theme::rounded(color, 1.0)),
                     text(format!("{name} {}", fmt::num(count, 1)))
@@ -449,10 +452,10 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
                 .align_y(iced::Alignment::Center),
             );
         }
-        col = col.push(ui::rule());
-        col = col.push(column![ui::label("BOMBS TO KILL, COVERT OPS V"), line.wrap()].spacing(2));
+        col = col.add(ui::rule());
+        col = col.add(column![ui::label("BOMBS TO KILL, COVERT OPS V"), line.wrap()].spacing(2));
     }
-    col.into()
+    col.boxed()
 }
 
 fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
@@ -469,7 +472,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
         .unwrap_or("target");
     let colors = [theme::EM, theme::THERMAL, theme::KINETIC, theme::EXPLOSIVE];
     let total: f64 = o.damage.iter().fold(0.0, |sum, part| sum + part);
-    let mut legend = row![].spacing(ui::GAP_ROW);
+    let mut legend = ui::line().spacing(ui::GAP_ROW);
     for ((name, part), color) in rufa_sim::stats::DAMAGE_NAMES
         .iter()
         .zip(o.damage)
@@ -478,7 +481,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
         if part <= 0.0 {
             continue;
         }
-        legend = legend.push(
+        legend = legend.add(
             row![
                 container(space().width(6).height(6)).style(theme::rounded(color, 1.0)),
                 text(format!("{name} {:.0}%", part / total * 100.0))
@@ -498,11 +501,11 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
                 bottom: 2.0,
                 left: 0.0,
             })
-            .into()
+            .boxed()
     } else {
-        space().height(0).into()
+        space().height(0).boxed()
     };
-    let mut col = column![].spacing(2);
+    let mut col = ui::col().spacing(2);
     // The name says what shoots, the value says how much and in what.
     let weapons = o.weapons();
     if weapons > 0.0 {
@@ -512,7 +515,7 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
         } else {
             format!("{} dps", fmt::num(weapons, 1))
         };
-        col = col.push(ui::stat_row(avail, "Guns", shown));
+        col = col.add(ui::stat_row(avail, "Guns", shown));
     }
     for (name, value, unit) in [
         ("Guns with reload", o.weapons_with_reload(), "dps"),
@@ -523,15 +526,15 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
         if value <= 0.0 {
             continue;
         }
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             name,
             format!("{} {unit}", fmt::num(value, 1)),
         ));
     }
-    col = col.push(split);
-    col = col.push(ui::rule());
-    col = col.push(
+    col = col.add(split);
+    col = col.add(ui::rule());
+    col = col.add(
         container(
             row![
                 small_owned(format!("Applied vs {target_name}")).width(Length::Fill),
@@ -541,15 +544,15 @@ fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> E
         )
         .height(ui::STAT_ROW),
     );
-    col.into()
+    col.boxed()
 }
 
 fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
     let r = &s.remote;
     let hp = |value: f64| format!("{} HP/s", fmt::num(value, 1));
-    let mut col = column![].spacing(3);
+    let mut col = ui::col().spacing(3);
     if r.shield > 0.0 {
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Shield",
             hp(r.shield),
@@ -566,7 +569,7 @@ fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
         } else {
             hp(r.armor)
         };
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Armor",
             shown,
@@ -574,7 +577,7 @@ fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
         ));
     }
     if r.hull > 0.0 {
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Hull",
             hp(r.hull),
@@ -582,7 +585,7 @@ fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
         ));
     }
     if r.capacitor > 0.0 {
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Capacitor",
             format!("{} GJ/s", fmt::num(r.capacitor, 1)),
@@ -590,45 +593,45 @@ fn remote<'a>(s: &'a Stats, avail: f32) -> El<'a> {
         ));
     }
     if r.range > 0.0 {
-        col = col.push(ui::stat_row(avail, "Range", fmt::distance(r.range)));
+        col = col.add(ui::stat_row(avail, "Range", fmt::distance(r.range)));
     }
     if r.drain > 0.0 {
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Capacitor used",
             format!("{} GJ/s", fmt::num(r.drain, 1)),
         ));
     }
-    col.into()
+    col.boxed()
 }
 
 fn mining<'a>(s: &'a Stats, avail: f32) -> El<'a> {
     let m = &s.mining;
     let rate = |value: f64| format!("{} m3/s", fmt::num(value, 2));
-    let mut col = column![].spacing(3);
+    let mut col = ui::col().spacing(3);
     if m.miner > 0.0 {
-        col = col.push(ui::stat_row(avail, "Miners", rate(m.miner)));
+        col = col.add(ui::stat_row(avail, "Miners", rate(m.miner)));
     }
     if m.drone > 0.0 {
-        col = col.push(ui::stat_row(avail, "Drones", rate(m.drone)));
+        col = col.add(ui::stat_row(avail, "Drones", rate(m.drone)));
     }
-    col = col.push(ui::stat_row(
+    col = col.add(ui::stat_row(
         avail,
         "Per hour",
         format!("{} m3", fmt::num(m.per_hour(), 0)),
     ));
     if m.drain > 0.0 {
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Capacitor used",
             format!("{} GJ/s", fmt::num(m.drain, 1)),
         ));
     }
-    col.into()
+    col.boxed()
 }
 
 fn lock_times<'a>(s: &'a Stats) -> El<'a> {
-    let mut line = row![].spacing(ui::GAP_ROW);
+    let mut line = ui::line().spacing(ui::GAP_ROW);
     for ((name, _), seconds) in rufa_sim::stats::TARGET_CLASSES
         .iter()
         .zip(s.targeting.lock_times)
@@ -636,7 +639,7 @@ fn lock_times<'a>(s: &'a Stats) -> El<'a> {
         if seconds <= 0.0 {
             continue;
         }
-        line = line.push(
+        line = line.add(
             row![
                 text(*name)
                     .size(ui::MICRO)
@@ -653,7 +656,7 @@ fn lock_times<'a>(s: &'a Stats) -> El<'a> {
     }
     column![ui::label("LOCK TIME"), line.wrap()]
         .spacing(2)
-        .into()
+        .boxed()
 }
 
 fn small_owned<'a>(s: String) -> text::Text<'a> {
@@ -719,14 +722,14 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
     // A remote transmitter feeds the simulation, so it belongs next to the
     // numbers the verdict came from.
     if s.incoming.capacitor > 0.0 {
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Incoming capacitor",
             format!("+{} GJ/s", fmt::num(s.incoming.capacitor, 2)),
             theme::SUCCESS_TEXT,
         ));
     }
-    col.push(ui::stat_row_colored(
+    col.add(ui::stat_row_colored(
         avail,
         "Left over",
         format!(
@@ -736,7 +739,7 @@ fn capacitor<'a>(doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
         ),
         net_color,
     ))
-    .into()
+    .boxed()
 }
 
 fn navigation(s: &Stats, avail: f32) -> El<'_> {
@@ -763,13 +766,13 @@ fn navigation(s: &Stats, avail: f32) -> El<'_> {
     ]
     .spacing(2);
     if n.max_warp_distance > 0.0 {
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Max warp distance",
             format!("{} AU", fmt::num(n.max_warp_distance, 1)),
         ));
     }
-    col.into()
+    col.boxed()
 }
 
 fn targeting(s: &Stats, avail: f32) -> El<'_> {
@@ -791,14 +794,14 @@ fn targeting(s: &Stats, avail: f32) -> El<'_> {
     ]
     .spacing(2);
     if t.drone_control_range > 0.0 {
-        col = col.push(ui::stat_row(
+        col = col.add(ui::stat_row(
             avail,
             "Drone control range",
             fmt::distance(t.drone_control_range),
         ));
     }
     if t.jam_chance > 0.0 {
-        col = col.push(ui::stat_row_colored(
+        col = col.add(ui::stat_row_colored(
             avail,
             "Chance to be jammed",
             format!("{}%", fmt::num(t.jam_chance, 1)),
@@ -806,10 +809,10 @@ fn targeting(s: &Stats, avail: f32) -> El<'_> {
         ));
     }
     if t.scan_resolution > 0.0 {
-        col = col.push(ui::rule());
-        col = col.push(lock_times(s));
+        col = col.add(ui::rule());
+        col = col.add(lock_times(s));
     }
-    col.into()
+    col.boxed()
 }
 
 fn price<'a>(app: &'a App, doc: &'a crate::Doc, avail: f32) -> El<'a> {
@@ -864,12 +867,12 @@ fn price<'a>(app: &'a App, doc: &'a crate::Doc, avail: f32) -> El<'a> {
         .align_y(iced::Alignment::Center),
     ]
     .spacing(2)
-    .into()
+    .boxed()
 }
 
 fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
     let Ok(game) = &app.game else {
-        return space().into();
+        return space().boxed();
     };
     let item = &doc.doc.fit.items[i];
     let mut col = column![ui::title(app.type_name(item.type_id))].spacing(3);
@@ -880,14 +883,14 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
                 .spacing(3)
                 .align_y(iced::Alignment::Center);
             for v in variants {
-                line = line.push(
+                line = line.add(
                     button(text(&v.name).size(ui::MICRO))
                         .padding(ui::pill_tight(5.0))
                         .style(theme::chip(v.id == item.type_id))
                         .on_press(Message::ReplaceItem(i, v.id)),
                 );
             }
-            col = col.push(line.wrap());
+            col = col.add(line.wrap());
         }
     }
     if let Some(ids) = app.ids
@@ -906,7 +909,7 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
                 }
                 any = true;
                 let loaded = item.charge.as_ref().is_some_and(|c| c.type_id == charge.id);
-                charges = charges.push(
+                charges = charges.add(
                     button(text(&charge.name).size(ui::MICRO))
                         .padding(ui::pill_tight(5.0))
                         .style(theme::chip(loaded))
@@ -915,22 +918,22 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
             }
         }
         if any {
-            charges = charges.push(
+            charges = charges.add(
                 button(text("none").size(ui::MICRO))
                     .padding(ui::pill_tight(5.0))
                     .style(theme::ghost)
                     .on_press(Message::LoadCharge(i, None)),
             );
-            col = col.push(charges.wrap());
+            col = col.add(charges.wrap());
         }
     }
     if app.ids.is_some() {
-        col = col.push(mutation_controls(app, game, doc, i));
-        col = col.push(toggle_controls(game, doc, i));
-        col = col.push(compare_variants(game, item.type_id));
+        col = col.add(mutation_controls(app, game, doc, i));
+        col = col.add(toggle_controls(game, doc, i));
+        col = col.add(compare_variants(game, item.type_id));
     }
     let Some(result) = doc.doc.calc.items.get(i) else {
-        return col.into();
+        return col.boxed();
     };
     let mut rows: Vec<(String, String, bool)> = Vec::new();
     for (id, value) in &result.attributes {
@@ -952,10 +955,10 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
         rows.push((label.display_name.clone(), shown, modified));
     }
     rows.sort();
-    col = col.push(ui::rule());
+    col = col.add(ui::rule());
     for (label, value, modified) in rows {
         let color = if modified { theme::ACCENT } else { theme::TEXT };
-        col = col.push(
+        col = col.add(
             row![
                 container(
                     text(label)
@@ -975,7 +978,7 @@ fn item_attributes<'a>(app: &'a App, doc: &'a crate::Doc, i: usize) -> El<'a> {
             .align_y(iced::Alignment::Center),
         );
     }
-    col.into()
+    col.boxed()
 }
 
 fn mutation_controls<'a>(
@@ -993,7 +996,7 @@ fn mutation_controls<'a>(
         .unwrap_or(item.type_id);
     let plasmids = edit::mutaplasmids_for(&game.sde, base);
     if plasmids.is_empty() {
-        return column![].into();
+        return ui::col().boxed();
     }
     let mut line = row![ui::label("MUTAPLASMID")]
         .spacing(3)
@@ -1005,7 +1008,7 @@ fn mutation_controls<'a>(
             .next()
             .unwrap_or("")
             .to_string();
-        line = line.push(
+        line = line.add(
             button(text(name).size(ui::MICRO))
                 .padding(ui::pill_tight(5.0))
                 .style(theme::chip(false))
@@ -1014,9 +1017,9 @@ fn mutation_controls<'a>(
     }
     let mut col = column![line.wrap()].spacing(3);
     let Some(mutation) = &item.mutation else {
-        return col.into();
+        return col.boxed();
     };
-    col = col.push(
+    col = col.add(
         button(text("Revert mutation").size(ui::MICRO))
             .padding(ui::pill_tight(6.0))
             .style(theme::danger)
@@ -1068,7 +1071,7 @@ fn mutation_controls<'a>(
             theme::DANGER_TEXT
         };
         let attribute = range.attribute_id;
-        col = col.push(
+        col = col.add(
             row![
                 text(label)
                     .size(ui::MICRO)
@@ -1091,14 +1094,14 @@ fn mutation_controls<'a>(
             .align_y(iced::Alignment::Center),
         );
     }
-    col.into()
+    col.boxed()
 }
 
 fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: usize) -> El<'a> {
     use rufa_sim::edit;
     let item = &doc.doc.fit.items[i];
     let info = game.info();
-    let mut col = column![].spacing(3);
+    let mut col = ui::col().spacing(3);
     let side = edit::side_effects(&info, item.type_id);
     if !side.is_empty() {
         let mut line = row![ui::label("SIDE EFFECTS")]
@@ -1108,14 +1111,14 @@ fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: u
             let on = item.booster_side_effects.contains(&effect);
             let style: fn(&iced::Theme, button::Status) -> button::Style =
                 if on { theme::danger } else { theme::secondary };
-            line = line.push(
+            line = line.add(
                 button(text(name).size(ui::MICRO))
                     .padding(ui::pill_tight(5.0))
                     .style(style)
                     .on_press(Message::ToggleSideEffect(i, effect)),
             );
         }
-        col = col.push(line.wrap());
+        col = col.add(line.wrap());
     }
     if matches!(
         item.slot,
@@ -1126,37 +1129,37 @@ fn toggle_controls<'a>(game: &'static rufa_data::Game, doc: &'a crate::Doc, i: u
             .align_y(iced::Alignment::Center);
         for (effect, name, _) in edit::fighter_abilities(&info, item.type_id) {
             let on = edit::ability_on(&info, &doc.doc.fit, i, effect);
-            line = line.push(
+            line = line.add(
                 button(text(name).size(ui::MICRO))
                     .padding(ui::pill_tight(5.0))
                     .style(theme::chip(on))
                     .on_press(Message::ToggleAbility(i, effect)),
             );
         }
-        col = col.push(line.wrap());
+        col = col.add(line.wrap());
     }
-    col.into()
+    col.boxed()
 }
 
 fn compare_variants<'a>(game: &'static rufa_data::Game, type_id: i32) -> El<'a> {
-    responsive(move |size| compare_table(game, type_id, size.width)).into()
+    responsive(move |size| compare_table(game, type_id, size.width)).boxed()
 }
 
 fn compare_table<'a>(game: &'static rufa_data::Game, type_id: i32, width: f32) -> El<'a> {
     let Some(ty) = game.sde.get_type(type_id) else {
-        return column![].into();
+        return ui::col().boxed();
     };
     let label_width = (width * 0.42).clamp(60.0, 150.0);
     let columns = (((width - label_width) / 46.0) as usize).clamp(1, 5);
     let all = game.catalog.variations(ty.market_group_id(), ty.group_id());
     if all.len() < 2 {
-        return column![].into();
+        return ui::col().boxed();
     }
     let mut variants: Vec<&rufa_data::TypeRef> = all.iter().filter(|v| v.id == type_id).collect();
     variants.extend(all.iter().filter(|v| v.id != type_id));
     variants.truncate(columns);
     if variants.len() < 2 {
-        return column![].into();
+        return ui::col().boxed();
     }
 
     let info = game.info();
@@ -1186,7 +1189,7 @@ fn compare_table<'a>(game: &'static rufa_data::Game, type_id: i32, width: f32) -
         }
     }
     if differing.is_empty() {
-        return column![].into();
+        return ui::col().boxed();
     }
 
     let names = short_names(&variants);
@@ -1214,7 +1217,7 @@ fn compare_table<'a>(game: &'static rufa_data::Game, type_id: i32, width: f32) -
         } else {
             theme::MUTED
         };
-        header = header.push(cell(name.clone(), color));
+        header = header.add(cell(name.clone(), color));
     }
 
     let mut table = column![header].spacing(1);
@@ -1244,11 +1247,11 @@ fn compare_table<'a>(game: &'static rufa_data::Game, type_id: i32, width: f32) -
             } else {
                 theme::TEXT
             };
-            line = line.push(cell(shown, color));
+            line = line.add(cell(shown, color));
         }
-        table = table.push(line);
+        table = table.add(line);
     }
-    table.into()
+    table.boxed()
 }
 
 fn short_names(variants: &[&rufa_data::TypeRef]) -> Vec<String> {

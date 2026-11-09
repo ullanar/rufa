@@ -19,7 +19,7 @@ winresource = "0.1"
 windows-registry = "0.6"
 mslnk = "0.1"
 ring = "0.17"
-iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "x11", "wayland", "thread-pool", "canvas", "crisp", "web-colors", "svg", "image-without-codecs"] }
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "8ff48c42b0d5188223501ea1ccc506fd5beaf36a", default-features = false, features = ["wgpu", "tiny-skia", "wayland", "wayland-decorations", "thread-pool", "canvas", "crisp", "web-colors", "svg", "image-without-codecs"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 rufa-data = { path = "crates/rufa-data" }
