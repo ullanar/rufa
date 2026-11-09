@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/ullanar/rufa/compare/v0.7.0...v0.8.0) (2026-11-09)
+
+
+### Features
+
+* **app:** the graph pane draws all nine Pyfa graphs ([f5c3e84](https://github.com/ullanar/rufa/commit/f5c3e84ace2f4934cf014fd4151cdab63ac82fb0))
+* **sim:** damage stats graph math with targets, tackle and time ([65cfaa0](https://github.com/ullanar/rufa/commit/65cfaa0c9fcb2692b644a709755d730b88657d53))
+* **sim:** the other eight graphs and one entry point for all nine ([f22dca4](https://github.com/ullanar/rufa/commit/f22dca42a58a2b65e897808687dcbbe716fa6a5d))
+
+
+### Bug Fixes
+
+* **app:** an opened fit sheds the modules its hull cannot take ([d7073d3](https://github.com/ullanar/rufa/commit/d7073d35e4fe65ec287983915c3abd85047f27f8))
+* **app:** Ctrl+Shift+G steps the graph with the shifted key ([c7546e1](https://github.com/ullanar/rufa/commit/c7546e1b217ba1bb4030a121f9cd010c0006ef58))
+* **app:** the effective damage axis keeps DPS in capitals ([334fd5f](https://github.com/ullanar/rufa/commit/334fd5f067e7c4127fcd3d14220da4c179513bac))
+* **app:** the status bar clips a message instead of running under the zoom control ([33ba05d](https://github.com/ullanar/rufa/commit/33ba05dbbc5b7c8abf756c782a09249e8b81183c))
+
 ## [0.7.0](https://github.com/ullanar/rufa/compare/v0.6.1...v0.7.0) (2026-11-06)
 
 
