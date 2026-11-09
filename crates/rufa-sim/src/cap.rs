@@ -128,8 +128,20 @@ pub fn simulate(
     drains: &[Drain],
     horizon: f64,
 ) -> CapResult {
-    let mut cap = capacity;
-    let mut low = capacity;
+    simulate_from(capacity, capacity, recharge_time, incoming, drains, horizon)
+}
+
+/// The same run from a capacitor that starts part full.
+pub fn simulate_from(
+    start: f64,
+    capacity: f64,
+    recharge_time: f64,
+    incoming: f64,
+    drains: &[Drain],
+    horizon: f64,
+) -> CapResult {
+    let mut cap = start.clamp(0.0, capacity);
+    let mut low = cap;
     let mut time = 0.0;
     let mut series = vec![(0.0, cap)];
     let mut fired = vec![0u32; drains.len()];
