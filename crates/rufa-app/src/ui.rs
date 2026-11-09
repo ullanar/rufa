@@ -1,6 +1,7 @@
+use iced::widget::Widget;
 use iced::widget::canvas::{self, Frame, Path, Stroke};
 use iced::widget::{
-    button, canvas as canvas_widget, column, container, row, scrollable, space, text,
+    Column, Row, button, canvas as canvas_widget, column, container, row, scrollable, space, text,
 };
 use iced::{Color, Element, Length, Point, Rectangle, Renderer, Theme, mouse};
 use rufa_sim::State;
@@ -45,9 +46,9 @@ pub fn pill(horizontal: f32) -> iced::Padding {
 /// A row of options where exactly one is picked. Pass the label, whether it is
 /// the current one, and the message that picks it.
 pub fn segmented<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
-    let mut line = row![].spacing(1).align_y(iced::Alignment::Center);
+    let mut line = line().spacing(1).align_y(iced::Alignment::Center);
     for (label, on, msg) in options {
-        line = line.push(
+        line = line.add(
             button(text(label).size(MICRO))
                 .padding(pill_tight(7.0))
                 .style(theme::segment(on))
@@ -57,14 +58,14 @@ pub fn segmented<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
     container(line)
         .padding(1)
         .style(theme::segment_frame)
-        .into()
+        .boxed()
 }
 
 /// The same control at the size a tab strip needs.
 pub fn segmented_wide<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
-    let mut line = row![].spacing(1).align_y(iced::Alignment::Center);
+    let mut line = line().spacing(1).align_y(iced::Alignment::Center);
     for (label, on, msg) in options {
-        line = line.push(
+        line = line.add(
             button(text(label).size(BODY).font(theme::UI_MEDIUM))
                 .padding(pill(8.0))
                 .style(theme::segment(on))
@@ -74,7 +75,7 @@ pub fn segmented_wide<'a>(options: Vec<(String, bool, Message)>) -> El<'a> {
     container(line)
         .padding(1)
         .style(theme::segment_frame)
-        .into()
+        .boxed()
 }
 
 /// A text field carries the same line box as a pill, so its caps also sit
@@ -111,6 +112,33 @@ pub fn pill_tall(horizontal: f32) -> iced::Padding {
 }
 
 pub type El<'a> = Element<'a, Message>;
+
+/// A column that takes children of any widget type.
+pub fn col<'a>() -> Column<El<'a>> {
+    Column::new()
+}
+
+/// A row that takes children of any widget type.
+pub fn line<'a>() -> Row<El<'a>> {
+    Row::new()
+}
+
+/// Pushes a child after boxing it, so one column or row can mix widget types.
+pub trait Add<'a> {
+    fn add(self, child: impl Widget<Message> + 'a) -> Self;
+}
+
+impl<'a> Add<'a> for Column<El<'a>> {
+    fn add(self, child: impl Widget<Message> + 'a) -> Self {
+        self.push(child.boxed())
+    }
+}
+
+impl<'a> Add<'a> for Row<El<'a>> {
+    fn add(self, child: impl Widget<Message> + 'a) -> Self {
+        self.push(child.boxed())
+    }
+}
 
 pub fn label<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
     text(s)
@@ -160,14 +188,17 @@ pub fn value_colored<'a>(s: impl text::IntoFragment<'a>, color: Color) -> text::
 }
 
 pub fn name_cell<'a>(name: &'a str) -> El<'a> {
-    container(small(name)).clip(true).width(Length::Fill).into()
+    container(small(name))
+        .clip(true)
+        .width(Length::Fill)
+        .boxed()
 }
 
 pub fn title<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
     text(s).font(theme::UI_SEMI).size(TITLE).color(theme::TEXT)
 }
 
-pub fn scroll<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Message> {
+pub fn scroll<'a, W: Widget<Message> + 'a>(content: W) -> scrollable::Scrollable<'a, Message, W> {
     scrollable(content)
         .direction(scrollable::Direction::Vertical(
             scrollable::Scrollbar::new()
@@ -178,7 +209,7 @@ pub fn scroll<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Mess
         .style(theme::scroll)
 }
 
-pub fn scroll_x<'a>(content: impl Into<El<'a>>) -> scrollable::Scrollable<'a, Message> {
+pub fn scroll_x<'a, W: Widget<Message> + 'a>(content: W) -> scrollable::Scrollable<'a, Message, W> {
     scrollable(content)
         .direction(scrollable::Direction::Horizontal(
             scrollable::Scrollbar::new()
@@ -257,7 +288,7 @@ pub fn rule<'a>() -> El<'a> {
         .style(theme::fill(theme::HAIRLINE))
         .width(Length::Fill)
         .height(1)
-        .into()
+        .boxed()
 }
 
 /// Name and value share a line while both fit the pane. The value drops
@@ -280,11 +311,11 @@ pub fn stat_row_colored<'a>(avail: f32, name: &'a str, shown: String, color: Col
                 .align_x(iced::alignment::Horizontal::Right),
         ]
         .spacing(1)
-        .into();
+        .boxed();
     }
     container(row![name_cell(name), value_colored(shown, color)].align_y(iced::Alignment::Center))
         .height(STAT_ROW)
-        .into()
+        .boxed()
 }
 
 pub fn section<'a>(
@@ -307,9 +338,9 @@ pub fn section_colored<'a>(
 ) -> El<'a> {
     let mut head = row![eyebrow(name).width(Length::Fill)].align_y(iced::Alignment::Center);
     if let Some(h) = headline {
-        head = head.push(value_colored(h, color));
+        head = head.add(value_colored(h, color));
     }
-    head = head.push(
+    head = head.add(
         text(if folded { "\u{25b8}" } else { "\u{25be}" })
             .size(MICRO)
             .color(theme::MUTED),
@@ -320,7 +351,7 @@ pub fn section_colored<'a>(
         .style(theme::bare)
         .on_press(Message::ToggleStatSection(name));
     let inside: El<'a> = if folded {
-        space().height(0).into()
+        space().height(0).boxed()
     } else {
         body
     };
@@ -328,7 +359,7 @@ pub fn section_colored<'a>(
         .padding([GAP_ROW, PAD])
         .width(Length::Fill)
         .style(theme::card)
-        .into()
+        .boxed()
 }
 
 pub fn gauge_text_color(fraction: f32) -> Color {
@@ -357,9 +388,9 @@ pub fn bar<'a>(fraction: f32, fill: Color, height: f32) -> El<'a> {
     let fraction = fraction.clamp(0.0, 1.0);
     let filled = (fraction * 1000.0).round() as u16;
     let rest = 1000 - filled;
-    let mut line = row![];
+    let mut line = line();
     if filled > 0 {
-        line = line.push(
+        line = line.add(
             container(space().width(Length::Fill).height(height))
                 .style(theme::rounded(fill, 2.0))
                 .width(Length::FillPortion(filled))
@@ -367,13 +398,13 @@ pub fn bar<'a>(fraction: f32, fill: Color, height: f32) -> El<'a> {
         );
     }
     if rest > 0 {
-        line = line.push(space().width(Length::FillPortion(rest)).height(height));
+        line = line.add(space().width(Length::FillPortion(rest)).height(height));
     }
     container(line)
         .style(theme::rounded(theme::TRACK, 2.0))
         .width(Length::Fill)
         .height(height)
-        .into()
+        .boxed()
 }
 
 pub fn split_bar<'a>(parts: [f64; 4], colors: [Color; 4], height: f32) -> El<'a> {
@@ -383,15 +414,15 @@ pub fn split_bar<'a>(parts: [f64; 4], colors: [Color; 4], height: f32) -> El<'a>
             .style(theme::rounded(theme::TRACK, 2.0))
             .width(Length::Fill)
             .height(height)
-            .into();
+            .boxed();
     }
-    let mut line = row![];
+    let mut line = line();
     for (part, color) in parts.into_iter().zip(colors) {
         let share = ((part / total) * 1000.0).round() as u16;
         if share == 0 {
             continue;
         }
-        line = line.push(
+        line = line.add(
             container(space().width(Length::Fill).height(height))
                 .style(theme::fill(color))
                 .width(Length::FillPortion(share))
@@ -402,7 +433,7 @@ pub fn split_bar<'a>(parts: [f64; 4], colors: [Color; 4], height: f32) -> El<'a>
         .style(theme::rounded(theme::TRACK, 2.0))
         .width(Length::Fill)
         .height(height)
-        .into()
+        .boxed()
 }
 
 pub fn gauge<'a>(avail: f32, name: &'a str, used: f64, total: f64, unit: &'static str) -> El<'a> {
@@ -445,21 +476,21 @@ pub fn gauge<'a>(avail: f32, name: &'a str, used: f64, total: f64, unit: &'stati
                 .align_x(iced::alignment::Horizontal::Right),
         ]
         .spacing(1)
-        .into()
+        .boxed()
     } else {
         row![named.width(Length::Fill), value_colored(shown, text_color)]
             .spacing(GAP)
             .align_y(iced::Alignment::Center)
-            .into()
+            .boxed()
     };
-    column![head, bar(fraction, color, 4.0)].spacing(2).into()
+    column![head, bar(fraction, color, 4.0)].spacing(2).boxed()
 }
 
 pub fn state_glyph<'a>(state: State) -> El<'a> {
     canvas_widget(StateGlyph { state })
         .width(14)
         .height(14)
-        .into()
+        .boxed()
 }
 
 struct StateGlyph {

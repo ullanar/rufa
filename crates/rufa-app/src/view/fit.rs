@@ -1,3 +1,4 @@
+use iced::widget::Widget;
 use iced::widget::responsive;
 use iced::widget::{
     button, column, container, image, mouse_area, pick_list, pin, row, space, stack, text,
@@ -12,17 +13,18 @@ use rufa_sim::{Slot, State};
 
 use crate::fmt;
 use crate::theme;
+use crate::ui::Add;
 use crate::ui::{self, El};
 use crate::{App, Doc, EnvChoice, Message};
 
 pub fn view(app: &App) -> El<'_> {
-    let mut tabs = row![].spacing(2).align_y(iced::Alignment::Center);
+    let mut tabs = ui::line().spacing(2).align_y(iced::Alignment::Center);
     for (i, doc) in app.docs.iter().enumerate() {
         let active = i == app.active;
         let lit = active || app.hovered_tab == Some(i);
         let icon: El<'_> = match app.icon(Kind::Icon, doc.doc.fit.ship.type_id) {
-            Some(handle) => image(handle).width(14).height(14).into(),
-            None => space().width(0).into(),
+            Some(handle) => image(handle).width(14).height(14).boxed(),
+            None => space().width(0).boxed(),
         };
         let mut label = row![
             icon,
@@ -34,7 +36,7 @@ pub fn view(app: &App) -> El<'_> {
         .spacing(ui::GAP)
         .align_y(iced::Alignment::Center);
         if doc.dirty {
-            label = label.push(text("•").size(ui::BODY).color(theme::ACCENT));
+            label = label.add(text("•").size(ui::BODY).color(theme::ACCENT));
         }
         let close =
             button(
@@ -45,7 +47,7 @@ pub fn view(app: &App) -> El<'_> {
             .padding(ui::pill(ui::GAP))
             .style(theme::ghost)
             .on_press(Message::CloseTab(i));
-        tabs = tabs.push(
+        tabs = tabs.add(
             mouse_area(
                 container(
                     row![
@@ -68,7 +70,7 @@ pub fn view(app: &App) -> El<'_> {
         Some(doc) => responsive(move |size| {
             let list = mouse_area(ui::scroll(slots(app, doc, size.width)).height(Length::Fill))
                 .on_move(Message::CursorMoved);
-            let mut layers: Vec<El<'_>> = vec![list.into()];
+            let mut layers: Vec<El<'_>> = vec![list.boxed()];
             if let Some((i, at)) = app.menu
                 && i < doc.doc.fit.items.len()
             {
@@ -79,22 +81,23 @@ pub fn view(app: &App) -> El<'_> {
                     mouse_area(space().width(Length::Fill).height(Length::Fill))
                         .on_press(Message::CloseMenu)
                         .on_right_press(Message::CloseMenu)
-                        .into(),
+                        .boxed(),
                 );
                 let max_height = (size.height - y - 8.0).max(120.0);
                 layers.push(
-                    pin(container(context_menu(app, doc, i, width)).max_height(max_height))
-                        .x(x)
-                        .y(y)
-                        .into(),
+                    pin(container(context_menu(app, doc, i, width))
+                        .height(Length::Shrink.max(max_height)))
+                    .x(x)
+                    .y(y)
+                    .boxed(),
                 );
             }
             stack(layers)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .into()
+                .boxed()
         })
-        .into(),
+        .boxed(),
         None => container(
             column![
                 text("No fit open")
@@ -107,7 +110,7 @@ pub fn view(app: &App) -> El<'_> {
             .align_x(iced::Alignment::Center),
         )
         .center(Length::Fill)
-        .into(),
+        .boxed(),
     };
     if app.docs.is_empty() {
         return body;
@@ -119,7 +122,7 @@ pub fn view(app: &App) -> El<'_> {
     column![strip, body]
         .spacing(ui::GAP_ROW)
         .height(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn hull_card<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
@@ -137,10 +140,10 @@ fn hull_card<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         })
         .unwrap_or_default();
     let picture: El<'a> = match app.icon(Kind::Render, fit.ship.type_id) {
-        Some(handle) => image(handle).width(48).height(48).into(),
+        Some(handle) => image(handle).width(48).height(48).boxed(),
         None => container(space().width(48).height(48))
             .style(theme::rounded(theme::SUNKEN, 6.0))
-            .into(),
+            .boxed(),
     };
     let r = &doc.doc.stats.resources;
     let tiles: [(&str, f64, f64); 2] = [
@@ -155,9 +158,9 @@ fn hull_card<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         (count * 84.0 + gaps).min(inner * 0.5)
     };
     let tile_width = ((block - gaps) / count).max(44.0);
-    let mut gauges = row![].spacing(ui::GAP_ROW);
+    let mut gauges = ui::line().spacing(ui::GAP_ROW);
     for (name, used, total) in tiles {
-        gauges = gauges.push(gauge_tile(name, used, total, tile_width));
+        gauges = gauges.add(gauge_tile(name, used, total, tile_width));
     }
 
     let name = container(
@@ -177,19 +180,19 @@ fn hull_card<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
             gauges,
         ]
         .spacing(ui::GAP_ROW)
-        .into()
+        .boxed()
     } else {
         row![picture, name, gauges]
             .spacing(ui::PAD)
             .align_y(iced::Alignment::Center)
-            .into()
+            .boxed()
     };
 
     container(column![head, ui::rule(), summary(app, doc)].spacing(ui::GAP_ROW))
         .padding(ui::PAD)
         .width(Length::Fill)
         .style(theme::card)
-        .into()
+        .boxed()
 }
 
 fn gauge_tile<'a>(name: &'a str, used: f64, total: f64, width: f32) -> El<'a> {
@@ -217,7 +220,7 @@ fn gauge_tile<'a>(name: &'a str, used: f64, total: f64, width: f32) -> El<'a> {
     ]
     .spacing(2)
     .width(width)
-    .into()
+    .boxed()
 }
 
 fn summary<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
@@ -244,20 +247,20 @@ fn summary<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
     ]
     .spacing(ui::PAD);
     if let Some(price) = app.fit_price(doc) {
-        line = line.push(figure(
+        line = line.add(figure(
             "FIT",
             format!("{} ISK", fmt::short(price.hull)),
             theme::TEXT_SECONDARY,
         ));
         if price.head > 0.0 {
-            line = line.push(figure(
+            line = line.add(figure(
                 "HEAD",
                 format!("{} ISK", fmt::short(price.head)),
                 theme::TEXT_SECONDARY,
             ));
         }
     }
-    line.wrap().into()
+    line.wrap().boxed()
 }
 
 fn figure<'a>(name: &'a str, shown: String, color: Color) -> El<'a> {
@@ -271,7 +274,7 @@ fn figure<'a>(name: &'a str, shown: String, color: Color) -> El<'a> {
     ]
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center)
-    .into()
+    .boxed()
 }
 
 fn rail_color(rack: Rack) -> Color {
@@ -308,7 +311,7 @@ fn rack_header<'a>(name: String, used: usize, count: u8, over: bool) -> El<'a> {
         left: 2.0,
     })
     .width(Length::Fill)
-    .into()
+    .boxed()
 }
 
 fn empty_row<'a>(label: String, rail: Color, rack: Option<Rack>) -> El<'a> {
@@ -327,8 +330,8 @@ fn empty_row<'a>(label: String, rail: Color, rack: Option<Rack>) -> El<'a> {
     match rack {
         Some(rack) => mouse_area(line)
             .on_press(Message::PickForRack(Some(rack)))
-            .into(),
-        None => line.into(),
+            .boxed(),
+        None => line.boxed(),
     }
 }
 
@@ -385,13 +388,13 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     let info_width = info_column(longest_info, width, fixed);
     let module_names = name_space(width, fixed + info_width);
     let layout = &doc.doc.layout;
-    let mut col = column![].spacing(1).padding(iced::Padding {
+    let mut col = ui::col().spacing(1).padding(iced::Padding {
         top: 0.0,
         right: 12.0,
         bottom: 0.0,
         left: 0.0,
     });
-    col = col.push(hull_card(app, doc, width));
+    col = col.add(hull_card(app, doc, width));
 
     if let Ok(game) = &app.game
         && let Some(ty) = game.sde.get_type(fit.ship.type_id)
@@ -408,14 +411,14 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                 .nth(1)
                 .unwrap_or("")
                 .to_string();
-            line = line.push(
+            line = line.add(
                 button(text(name).size(ui::SMALL))
                     .padding(ui::pill(8.0))
                     .style(theme::chip(fit.ship.mode == Some(mode)))
                     .on_press(Message::SetMode(Some(mode))),
             );
         }
-        col = col.push(container(line).padding([ui::GAP, ui::TIGHT]));
+        col = col.add(container(line).padding([ui::GAP, ui::TIGHT]));
     }
 
     for rack in Rack::ALL {
@@ -428,7 +431,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         if count == 0 && used == 0 {
             continue;
         }
-        col = col.push(rack_header(
+        col = col.add(rack_header(
             rack.label().to_string(),
             used,
             count,
@@ -438,7 +441,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
             let slot = rack.slot(index);
             match fit.items.iter().position(|it| it.slot == slot) {
                 Some(i) => {
-                    col = col.push(item_row(
+                    col = col.add(item_row(
                         app,
                         doc,
                         i,
@@ -449,7 +452,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
                     ))
                 }
                 None => {
-                    col = col.push(empty_row(
+                    col = col.add(empty_row(
                         format!("{} slot", rack.label()),
                         rail_color(rack),
                         Some(rack),
@@ -460,7 +463,7 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
     }
 
     if let Some(section) = drone_section(app, doc, compact, width) {
-        col = col.push(section);
+        col = col.add(section);
     }
 
     let sections: [(&str, SlotFilter, Color); 4] = [
@@ -492,14 +495,14 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         if indexes.is_empty() {
             continue;
         }
-        col = col.push(container(ui::eyebrow(label)).padding(iced::Padding {
+        col = col.add(container(ui::eyebrow(label)).padding(iced::Padding {
             top: 8.0,
             right: 6.0,
             bottom: 2.0,
             left: 2.0,
         }));
         for i in indexes {
-            col = col.push(item_row(
+            col = col.add(item_row(
                 app,
                 doc,
                 i,
@@ -511,9 +514,9 @@ fn slots<'a>(app: &'a App, doc: &'a Doc, width: f32) -> El<'a> {
         }
     }
 
-    col = col.push(implant_sets(app));
-    col = col.push(projected(app, doc));
-    col.into()
+    col = col.add(implant_sets(app));
+    col = col.add(projected(app, doc));
+    col.boxed()
 }
 
 fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> Option<El<'a>> {
@@ -526,7 +529,7 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> O
     }
     let mut col = column![drone_header(load, compact)].spacing(1);
     if types.is_empty() {
-        col = col.push(empty_row(
+        col = col.add(empty_row(
             "Drone bay".to_string(),
             theme::RAIL_SERVICE,
             None,
@@ -542,9 +545,9 @@ fn drone_section<'a>(app: &'a App, doc: &'a Doc, compact: bool, width: f32) -> O
     let names = name_space(width, fixed + info_width);
     for type_id in types {
         let room = drones::room(&game.info(), &ids, &doc.doc.calc, type_id);
-        col = col.push(drone_row(app, doc, type_id, room, load, info_width, names));
+        col = col.add(drone_row(app, doc, type_id, room, load, info_width, names));
     }
-    Some(col.into())
+    Some(col.boxed())
 }
 
 fn drone_header<'a>(load: drones::Load, compact: bool) -> El<'a> {
@@ -579,10 +582,10 @@ fn drone_header<'a>(load: drones::Load, compact: bool) -> El<'a> {
     .spacing(ui::GAP_ROW)
     .align_y(iced::Alignment::Center);
     if !compact {
-        line = line.push(ui::label("BANDWIDTH"));
-        line = line.push(pair(load.bandwidth_used, load.bandwidth_total, " Mbit"));
-        line = line.push(ui::label("BAY"));
-        line = line.push(pair(load.bay_used, load.bay_total, " m3"));
+        line = line.add(ui::label("BANDWIDTH"));
+        line = line.add(pair(load.bandwidth_used, load.bandwidth_total, " Mbit"));
+        line = line.add(ui::label("BAY"));
+        line = line.add(pair(load.bay_used, load.bay_total, " m3"));
     }
     container(line)
         .padding(iced::Padding {
@@ -592,12 +595,12 @@ fn drone_header<'a>(load: drones::Load, compact: bool) -> El<'a> {
             left: 2.0,
         })
         .width(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u32) -> El<'a> {
     let boxes = cap.max(stack.launched).clamp(1, 32);
-    let mut line = row![].spacing(2);
+    let mut line = ui::line().spacing(2);
     for count in 1..=boxes {
         let state = if count <= stack.launched {
             theme::Pip::Launched
@@ -619,7 +622,7 @@ fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u
             };
             pip = pip.on_press(Message::DroneLaunched(type_id, want));
         }
-        line = line.push(pip);
+        line = line.add(pip);
     }
     tooltip(
         line,
@@ -636,7 +639,7 @@ fn drone_pips<'a>(type_id: i32, stack: drones::Stack, room: drones::Room, cap: u
         tooltip::Position::Left,
     )
     .delay(std::time::Duration::from_millis(400))
-    .into()
+    .boxed()
 }
 
 /// The readings of the first drone of the stack that is not offline.
@@ -664,8 +667,8 @@ fn drone_row<'a>(
     let first = indexes.first().copied().unwrap_or(0);
     let selected = indexes.iter().any(|i| app.selected.contains(i));
     let icon: El<'a> = match app.icon(Kind::Icon, type_id) {
-        Some(handle) => image(handle).width(18).height(18).into(),
-        None => space().width(18).height(18).into(),
+        Some(handle) => image(handle).width(18).height(18).boxed(),
+        None => space().width(18).height(18).boxed(),
     };
     let rail = if stack.launched > 0 {
         theme::ACTIVE
@@ -692,30 +695,30 @@ fn drone_row<'a>(
     .align_y(iced::Alignment::Center);
 
     if info_width > 0.0 {
-        line = line.push(info_cell(info, info_width));
+        line = line.add(info_cell(info, info_width));
     }
     // The whole stack, launched and stowed alike.
-    line = line.push(price_cell(
+    line = line.add(price_cell(
         app.prices
             .get(type_id)
             .map(|unit| unit * f64::from(stack.total())),
     ));
 
-    line = line.push(
+    line = line.add(
         text(format!("x{}", stack.total()))
             .size(ui::SMALL)
             .color(theme::TEXT_SECONDARY)
             .wrapping(text::Wrapping::None),
     );
-    line = line.push(step(
+    line = line.add(step(
         "−",
         (stack.total() > 0).then(|| Message::DroneCarried(type_id, stack.total() - 1)),
     ));
-    line = line.push(step(
+    line = line.add(step(
         "+",
         (room.bay > 0).then(|| Message::DroneCarried(type_id, stack.total() + 1)),
     ));
-    line = line.push(
+    line = line.add(
         button(text("×").size(ui::SMALL))
             .padding(ui::pill_tight(ui::GAP))
             .style(theme::ghost)
@@ -734,7 +737,7 @@ fn drone_row<'a>(
     .on_right_press(Message::OpenMenu(first))
     .on_enter(Message::HoverItem(Some(first)))
     .on_exit(Message::HoverItem(None))
-    .into()
+    .boxed()
 }
 
 /// What the line costs, right under the numbers it belongs to. Blank when no
@@ -753,7 +756,7 @@ fn price_cell<'a>(price: Option<f64>) -> El<'a> {
     .clip(true)
     .width(Length::Fixed(PRICE_WIDTH - ui::GAP_ROW))
     .align_x(iced::alignment::Horizontal::Right)
-    .into()
+    .boxed()
 }
 
 fn info_cell<'a>(parts: Vec<String>, width: f32) -> El<'a> {
@@ -779,7 +782,7 @@ fn info_cell<'a>(parts: Vec<String>, width: f32) -> El<'a> {
     )
     .clip(true)
     .width(width)
-    .into()
+    .boxed()
 }
 
 fn step<'a>(glyph: &'static str, msg: Option<Message>) -> El<'a> {
@@ -794,18 +797,18 @@ fn step<'a>(glyph: &'static str, msg: Option<Message>) -> El<'a> {
     if let Some(msg) = msg {
         b = b.on_press(msg);
     }
-    b.into()
+    b.boxed()
 }
 
 /// A strip above the status bar: the count and the first problem, with the
 /// whole list one click away. Absent when the fit is legal.
 pub fn violations<'a>(app: &'a App) -> El<'a> {
     let Some(doc) = app.docs.get(app.active) else {
-        return space().height(0).into();
+        return space().height(0).boxed();
     };
     let list = doc.doc.calc.violations.as_deref().unwrap_or(&[]);
     let Some(first) = list.first() else {
-        return space().height(0).into();
+        return space().height(0).boxed();
     };
     let count = if list.len() == 1 {
         "1 problem".to_string()
@@ -843,7 +846,7 @@ pub fn violations<'a>(app: &'a App) -> El<'a> {
     .spacing(2);
     if app.violations_open {
         for v in list.iter().skip(1) {
-            body = body.push(
+            body = body.add(
                 row![
                     space().width(ui::SMALL),
                     text(app.describe_violation(v))
@@ -858,7 +861,7 @@ pub fn violations<'a>(app: &'a App) -> El<'a> {
         .padding([ui::GAP, ui::PAD])
         .width(Length::Fill)
         .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE))
-        .into()
+        .boxed()
 }
 
 fn implant_sets(app: &App) -> El<'_> {
@@ -872,7 +875,7 @@ fn implant_sets(app: &App) -> El<'_> {
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     for (i, set) in app.implant_sets.iter().enumerate() {
-        line = line.push(
+        line = line.add(
             row![
                 button(text(&set.name).size(ui::SMALL))
                     .padding(ui::pill(8.0))
@@ -886,7 +889,7 @@ fn implant_sets(app: &App) -> El<'_> {
             .align_y(iced::Alignment::Center),
         );
     }
-    container(line.wrap()).padding([ui::PAD, ui::TIGHT]).into()
+    container(line.wrap()).padding([ui::PAD, ui::TIGHT]).boxed()
 }
 
 fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
@@ -915,9 +918,10 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
                 _ => None,
             })
             .unwrap_or_else(|| options[0].clone());
-        col = col.push(
+        col = col.add(
             container(
-                pick_list(options, Some(selected), Message::Environment)
+                pick_list(Some(selected), options, ToString::to_string)
+                    .on_select(Message::Environment)
                     .text_size(ui::SMALL)
                     .padding(ui::field(4.0, 8.0))
                     .style(theme::picker),
@@ -934,7 +938,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
             continue;
         }
         any_tab = true;
-        tabs = tabs.push(
+        tabs = tabs.add(
             button(text(app.fit_title(other)).size(ui::SMALL))
                 .padding(ui::pill(8.0))
                 .style(theme::chip(false))
@@ -942,13 +946,13 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
         );
     }
     if any_tab {
-        col = col.push(container(tabs.wrap()).padding(ui::TIGHT));
+        col = col.add(container(tabs.wrap()).padding(ui::TIGHT));
     }
     for (i, p) in doc.doc.projections.iter().enumerate() {
         if matches!(p, Projected::Beacon(_)) {
             continue;
         }
-        col = col.push(
+        col = col.add(
             container(
                 row![
                     container(ui::body(app.projection_label(p)).wrapping(text::Wrapping::None))
@@ -965,7 +969,7 @@ fn projected<'a>(app: &'a App, doc: &'a Doc) -> El<'a> {
             .padding([0.0, ui::GAP_ROW]),
         );
     }
-    col.into()
+    col.boxed()
 }
 
 fn item_info(app: &App, doc: &Doc, i: usize) -> Vec<String> {
@@ -1037,11 +1041,11 @@ fn item_row<'a>(
     // plugged in, and the engine applies it whatever the state says, so a
     // control there would lie about what the numbers do.
     let glyph: El<'a> = if item.slot == Slot::Cargo {
-        space().width(18).into()
+        space().width(18).boxed()
     } else if matches!(item.slot, Slot::Implant(_) | Slot::Booster(_)) {
         container(ui::state_glyph(State::Online))
             .padding([0.0, ui::TIGHT])
-            .into()
+            .boxed()
     } else {
         tooltip(
             mouse_area(container(ui::state_glyph(state)).padding([0.0, ui::TIGHT]))
@@ -1060,12 +1064,16 @@ fn item_row<'a>(
             tooltip::Position::Right,
         )
         .delay(std::time::Duration::from_millis(400))
-        .into()
+        .boxed()
     };
 
     let icon: El<'a> = match app.icon(Kind::Icon, item.type_id) {
-        Some(handle) => image(handle).width(18).height(18).border_radius(3.0).into(),
-        None => space().width(18).height(18).into(),
+        Some(handle) => image(handle)
+            .width(18)
+            .height(18)
+            .border_radius(3.0)
+            .boxed(),
+        None => space().width(18).height(18).boxed(),
     };
     let mut line = row![
         container(space().width(3).height(Length::Fill)).style(theme::rounded(rail_shown, 1.0)),
@@ -1106,14 +1114,14 @@ fn item_row<'a>(
             Some((at, text)) if *at == i => text.clone(),
             _ => item.quantity.to_string(),
         };
-        line = line.push(
+        line = line.add(
             button(text("−").size(ui::SMALL))
                 .padding(ui::pill_tight(ui::GAP))
                 .style(theme::ghost)
                 .on_press(Message::Quantity(i, item.quantity.saturating_sub(1))),
         );
-        line = line.push(
-            text_input("", &shown)
+        line = line.add(
+            text_input("", shown)
                 .on_input(move |s| Message::QuantityInput(i, s))
                 .on_submit(Message::QuantityDone)
                 .size(ui::SMALL)
@@ -1122,7 +1130,7 @@ fn item_row<'a>(
                 .align_x(iced::alignment::Horizontal::Right)
                 .style(theme::input),
         );
-        line = line.push(
+        line = line.add(
             button(text("+").size(ui::SMALL))
                 .padding(ui::pill_tight(ui::GAP))
                 .style(theme::ghost)
@@ -1137,11 +1145,11 @@ fn item_row<'a>(
             .padding(ui::pill_tight(ui::GAP))
             .style(theme::ghost)
             .on_press(Message::RemoveItem(i))
-            .into()
+            .boxed()
     } else {
-        space().width(19).into()
+        space().width(19).boxed()
     };
-    line = line.push(remove);
+    line = line.add(remove);
 
     mouse_area(
         container(line)
@@ -1158,7 +1166,7 @@ fn item_row<'a>(
     .on_right_press(Message::OpenMenu(i))
     .on_enter(Message::HoverItem(Some(i)))
     .on_exit(Message::HoverItem(None))
-    .into()
+    .boxed()
 }
 
 fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> {
@@ -1196,7 +1204,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         && is_module
     {
         let info = game.info();
-        let mut charges = row![].spacing(3);
+        let mut charges = ui::line().spacing(3);
         let mut any = false;
         for group in rufa_sim::place::charge_groups(&info, &ids, item.type_id) {
             for charge in game.catalog.charges_in_group(group) {
@@ -1205,7 +1213,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
                 }
                 any = true;
                 let loaded = item.charge.as_ref().is_some_and(|c| c.type_id == charge.id);
-                charges = charges.push(chip(
+                charges = charges.add(chip(
                     charge.name.clone(),
                     loaded,
                     Message::MenuCharge(Some(charge.id)),
@@ -1213,25 +1221,25 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
             }
         }
         if any {
-            charges = charges.push(chip(
+            charges = charges.add(chip(
                 "none".to_string(),
                 item.charge.is_none(),
                 Message::MenuCharge(None),
             ));
-            col = col.push(ui::label("CHARGE"));
-            col = col.push(charges.wrap());
+            col = col.add(ui::label("CHARGE"));
+            col = col.add(charges.wrap());
         }
     }
-    col = col.push(ui::rule());
-    col = col.push(entry(
+    col = col.add(ui::rule());
+    col = col.add(entry(
         format!("{} Stats", ui::clip(&name, 28)),
         Message::CloseMenu,
     ));
-    col = col.push(entry("Market Group".to_string(), Message::MenuMarketJump));
+    col = col.add(entry("Market Group".to_string(), Message::MenuMarketJump));
     if item.slot != Slot::Cargo {
-        col = col.push(entry("Move To Cargo".to_string(), Message::MoveToCargo(i)));
+        col = col.add(entry("Move To Cargo".to_string(), Message::MoveToCargo(i)));
     }
-    col = col.push(entry(
+    col = col.add(entry(
         if count > 1 {
             format!("Remove {count} items")
         } else {
@@ -1239,7 +1247,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         },
         Message::MenuRemove,
     ));
-    col = col.push(entry(
+    col = col.add(entry(
         "Remove All Similar".to_string(),
         Message::MenuRemoveSimilar,
     ));
@@ -1249,13 +1257,13 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         if let Some(ty) = game.sde.get_type(item.type_id) {
             let variants = game.catalog.variations(ty.market_group_id(), ty.group_id());
             if variants.len() > 1 {
-                col = col.push(ui::rule());
-                col = col.push(ui::label("VARIATIONS"));
+                col = col.add(ui::rule());
+                col = col.add(ui::label("VARIATIONS"));
                 for (label, ids) in meta_groups(game, variants) {
-                    col = col.push(text(label).size(ui::MICRO).color(theme::MUTED));
+                    col = col.add(text(label).size(ui::MICRO).color(theme::MUTED));
                     for (id, vname) in ids {
                         let on = id == item.type_id;
-                        col = col.push(
+                        col = col.add(
                             button(
                                 container(
                                     text(vname)
@@ -1282,8 +1290,8 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
             .unwrap_or(item.type_id);
         let plasmids = rufa_sim::edit::mutaplasmids_for(&game.sde, base);
         if !plasmids.is_empty() {
-            col = col.push(ui::label("APPLY MUTAPLASMID"));
-            let mut line = row![].spacing(3);
+            col = col.add(ui::label("APPLY MUTAPLASMID"));
+            let mut line = ui::line().spacing(3);
             for p in &plasmids {
                 let short = app
                     .type_name(*p)
@@ -1291,29 +1299,29 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
                     .next()
                     .unwrap_or("")
                     .to_string();
-                line = line.push(chip(short, false, Message::MenuMutate(*p)));
+                line = line.add(chip(short, false, Message::MenuMutate(*p)));
             }
             if item.mutation.is_some() {
-                line = line.push(chip(
+                line = line.add(chip(
                     "Revert".to_string(),
                     false,
                     Message::RevertMutation(i),
                 ));
             }
-            col = col.push(line.wrap());
+            col = col.add(line.wrap());
         }
-        col = col.push(ui::rule());
-        col = col.push(entry(
+        col = col.add(ui::rule());
+        col = col.add(entry(
             format!("Fill With {}", ui::clip(&name, 24)),
             Message::MenuFill,
         ));
     }
     if is_drone {
         let stack = drones::stack(&doc.doc.fit, item.type_id);
-        col = col.push(ui::rule());
-        col = col.push(entry("Fill The Drone Bay".to_string(), Message::MenuFill));
-        col = col.push(ui::label("IN SPACE"));
-        col = col.push(
+        col = col.add(ui::rule());
+        col = col.add(entry("Fill The Drone Bay".to_string(), Message::MenuFill));
+        col = col.add(ui::label("IN SPACE"));
+        col = col.add(
             row![
                 chip(
                     "Launch all".to_string(),
@@ -1332,7 +1340,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
             .padding(ui::PAD)
             .width(width)
             .style(theme::tooltip)
-            .into();
+            .boxed();
     }
 
     let max = doc
@@ -1342,7 +1350,7 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         .get(i)
         .map(|r| r.max_state)
         .unwrap_or(State::Online);
-    let mut states = row![].spacing(3);
+    let mut states = ui::line().spacing(3);
     for s in [
         State::Offline,
         State::Online,
@@ -1352,20 +1360,20 @@ fn context_menu<'a>(app: &'a App, doc: &'a Doc, i: usize, width: f32) -> El<'a> 
         if s > max {
             continue;
         }
-        states = states.push(chip(
+        states = states.add(chip(
             state_name(s).to_string(),
             item.state == s,
             Message::MenuState(s),
         ));
     }
-    col = col.push(ui::rule());
-    col = col.push(ui::label("STATE"));
-    col = col.push(states);
+    col = col.add(ui::rule());
+    col = col.add(ui::label("STATE"));
+    col = col.add(states);
     container(ui::scroll(col))
         .padding(ui::PAD)
         .width(width)
         .style(theme::tooltip)
-        .into()
+        .boxed()
 }
 
 fn meta_groups<'a>(
@@ -1410,11 +1418,15 @@ fn state_name(state: State) -> &'static str {
 
 fn charge_cell<'a>(i: usize, charge: String, width: f32, icon: Option<image::Handle>) -> El<'a> {
     if charge.is_empty() {
-        return space().width(width).into();
+        return space().width(width).boxed();
     }
     let picture: El<'a> = match icon {
-        Some(handle) => image(handle).width(14).height(14).border_radius(2.0).into(),
-        None => space().width(14).height(14).into(),
+        Some(handle) => image(handle)
+            .width(14)
+            .height(14)
+            .border_radius(2.0)
+            .boxed(),
+        None => space().width(14).height(14).boxed(),
     };
     mouse_area(
         container(
@@ -1436,5 +1448,5 @@ fn charge_cell<'a>(i: usize, charge: String, width: f32, icon: Option<image::Han
         .width(width),
     )
     .on_right_press(Message::LoadCharge(i, None))
-    .into()
+    .boxed()
 }

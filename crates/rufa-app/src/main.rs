@@ -89,18 +89,16 @@ fn main() -> iced::Result {
         platform_specific: platform_specific(),
         ..Default::default()
     };
-    let mut application = iced::application(App::boot, App::update, App::view)
+    let application = iced::application(App::boot, App::update, App::view)
         .title(App::title)
         .theme(theme::of)
         .style(theme::root)
         .subscription(App::subscription)
         .scale_factor(|app: &App| app.settings.ui_scale.clamp(0.75, 2.5))
         .window(window)
-        .default_font(theme::UI)
+        .font(theme::UI)
+        .fonts(theme::FONTS)
         .antialiasing(true);
-    for font in theme::FONTS {
-        application = application.font(font);
-    }
     application.run()
 }
 
@@ -1704,13 +1702,16 @@ impl App {
                     match rufa_sim::format::eft::save_eft(&game.info(), &doc.doc.fit) {
                         Ok(text) => {
                             self.status = "EFT copied to clipboard".to_string();
-                            return clipboard::write(text);
+                            return clipboard::write(text).discard();
                         }
                         Err(e) => self.status = format!("EFT export failed: {e:?}"),
                     }
                 }
             }
-            Message::PasteEft => return clipboard::read().map(Message::ImportText),
+            Message::PasteEft => {
+                return clipboard::read_text()
+                    .map(|text| Message::ImportText(text.ok().map(|t| t.as_str().to_string())));
+            }
             Message::ImportText(text) => {
                 let Some(text) = text else {
                     self.status = "Clipboard is empty".to_string();

@@ -3,10 +3,12 @@ mod fit;
 mod graph;
 mod stats;
 
+use iced::widget::Widget;
 use iced::widget::{button, column, container, pane_grid, row, space, stack, text, text_input};
 use iced::{Element, Length};
 
 use crate::theme;
+use crate::ui::Add;
 use crate::ui::{self, El};
 use crate::{App, CenterTab, CharChoice, Message, Pane};
 
@@ -46,9 +48,9 @@ pub fn root(app: &App) -> Element<'_, Message> {
     ]
     .spacing(ui::GAP);
     if app.update_prompt {
-        return stack![body, update_window(app)].into();
+        return stack![body, update_window(app)].boxed();
     }
-    body.into()
+    body.boxed()
 }
 
 fn paragraph(s: String) -> El<'static> {
@@ -56,20 +58,20 @@ fn paragraph(s: String) -> El<'static> {
         .size(ui::SMALL)
         .color(theme::TEXT_SECONDARY)
         .width(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn install_screen(app: &App) -> Element<'_, Message> {
-    let mut card = column![].spacing(ui::GAP_ROW).width(Length::Fill);
+    let mut card = ui::col().spacing(ui::GAP_ROW).width(Length::Fill);
     match &app.setup_done {
         Some(placed) => {
-            card = card.push(ui::eyebrow("Installed"));
-            card = card.push(paragraph(placed.to_string_lossy().to_string()));
-            card = card.push(paragraph(
+            card = card.add(ui::eyebrow("Installed"));
+            card = card.add(paragraph(placed.to_string_lossy().to_string()));
+            card = card.add(paragraph(
                 "The menu entry and the icon are in place on Linux.".to_string(),
             ));
-            card = card.push(ui::rule());
-            card = card.push(
+            card = card.add(ui::rule());
+            card = card.add(
                 row![
                     button(text("Start Rufa").size(ui::SMALL))
                         .padding(ui::pill_tall(ui::PAD_WIDE))
@@ -84,12 +86,12 @@ fn install_screen(app: &App) -> Element<'_, Message> {
             );
         }
         None => {
-            card = card.push(ui::eyebrow(if app.setup_replacing {
+            card = card.add(ui::eyebrow(if app.setup_replacing {
                 "Replace the installed copy"
             } else {
                 "Install Rufa"
             }));
-            card = card.push(paragraph(
+            card = card.add(paragraph(
                 if app.setup_replacing {
                     "Rufa is already installed. This build can take its place, with no download and no network."
                 } else {
@@ -97,21 +99,21 @@ fn install_screen(app: &App) -> Element<'_, Message> {
                 }
                 .to_string(),
             ));
-            card = card.push(
+            card = card.add(
                 text_input("install directory", &app.setup_dir)
                     .on_input(Message::SetupDir)
                     .padding(ui::GAP_ROW)
                     .size(ui::SMALL),
             );
             if let Some(error) = &app.setup_error {
-                card = card.push(
+                card = card.add(
                     text(error.clone())
                         .size(ui::SMALL)
                         .color(theme::DANGER_TEXT),
                 );
             }
-            card = card.push(ui::rule());
-            card = card.push(
+            card = card.add(ui::rule());
+            card = card.add(
                 row![
                     button(
                         text(if app.setup_replacing {
@@ -143,51 +145,53 @@ fn install_screen(app: &App) -> Element<'_, Message> {
     .height(Length::Fill)
     .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
-    .into()
+    .boxed()
 }
 
 fn update_window(app: &App) -> El<'_> {
     let installed = env!("CARGO_PKG_VERSION");
-    let mut card = column![].spacing(ui::GAP_ROW).max_width(380);
+    let mut card = ui::col()
+        .spacing(ui::GAP_ROW)
+        .width(Length::Shrink.max(380));
     match &app.app_update {
         Some(release) => {
-            card = card.push(ui::eyebrow("Update available"));
-            card = card.push(fact("Installed", format!("v{installed}")));
-            card = card.push(fact("Available", release.tag.clone()));
+            card = card.add(ui::eyebrow("Update available"));
+            card = card.add(fact("Installed", format!("v{installed}")));
+            card = card.add(fact("Available", release.tag.clone()));
             if !release.published.is_empty() {
-                card = card.push(fact("Released", release.published.clone()));
+                card = card.add(fact("Released", release.published.clone()));
             }
-            card = card.push(notes_link("Read what changed"));
+            card = card.add(notes_link("Read what changed"));
         }
         None => {
-            card = card.push(ui::eyebrow("No update"));
-            card = card.push(fact("Installed", format!("v{installed}")));
-            card = card.push(ui::small("This is the latest release."));
-            card = card.push(notes_link("Read what it carries"));
+            card = card.add(ui::eyebrow("No update"));
+            card = card.add(fact("Installed", format!("v{installed}")));
+            card = card.add(ui::small("This is the latest release."));
+            card = card.add(notes_link("Read what it carries"));
         }
     }
     if let Some(error) = &app.update_error {
-        card = card.push(ui::rule());
-        card = card.push(
+        card = card.add(ui::rule());
+        card = card.add(
             text(error.clone())
                 .size(ui::SMALL)
                 .color(theme::DANGER_TEXT),
         );
     }
-    card = card.push(ui::rule());
-    card = card.push(update_buttons(app));
+    card = card.add(ui::rule());
+    card = card.add(update_buttons(app));
     container(
         container(card)
             .padding(ui::PAD * 2.0)
             .style(theme::card)
-            .max_width(420),
+            .width(Length::Shrink.max(420)),
     )
     .width(Length::Fill)
     .height(Length::Fill)
     .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
     .style(theme::scrim)
-    .into()
+    .boxed()
 }
 
 fn notes_link<'a>(label: &'a str) -> El<'a> {
@@ -195,31 +199,31 @@ fn notes_link<'a>(label: &'a str) -> El<'a> {
         .padding(ui::pill_tight(0.0))
         .style(theme::link)
         .on_press(Message::ReleaseNotes)
-        .into()
+        .boxed()
 }
 
 fn fact<'a>(name: &'a str, value: String) -> El<'a> {
     row![ui::small(name).width(Length::Fill), ui::value(value)]
         .align_y(iced::Alignment::Center)
-        .into()
+        .boxed()
 }
 
 fn update_buttons(app: &App) -> El<'_> {
-    let mut line = row![].spacing(ui::GAP);
+    let mut line = ui::line().spacing(ui::GAP);
     if let Some(tag) = &app.update_ready {
-        line = line.push(
+        line = line.add(
             button(text(format!("Restart into {tag}")).size(ui::SMALL))
                 .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::primary)
                 .on_press(Message::Restart),
         );
-        line = line.push(
+        line = line.add(
             button(text("Later").size(ui::SMALL))
                 .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::ghost)
                 .on_press(Message::UpdateLater),
         );
-        return line.into();
+        return line.boxed();
     }
     if app.app_update.is_some() {
         let now = button(
@@ -232,39 +236,39 @@ fn update_buttons(app: &App) -> El<'_> {
         )
         .padding(ui::pill_tall(ui::PAD_WIDE))
         .style(theme::primary);
-        line = line.push(if app.update_busy {
+        line = line.add(if app.update_busy {
             now
         } else {
             now.on_press(Message::UpdateNow)
         });
-        line = line.push(
+        line = line.add(
             button(text("Next time").size(ui::SMALL))
                 .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::secondary)
                 .on_press(Message::UpdateLater),
         );
-        line = line.push(
+        line = line.add(
             button(text("Skip this version").size(ui::SMALL))
                 .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::ghost)
                 .on_press(Message::UpdateSkip),
         );
-        return line.into();
+        return line.boxed();
     }
-    line.push(
+    line.add(
         button(text("Close").size(ui::SMALL))
             .padding(ui::pill_tall(ui::PAD_WIDE))
             .style(theme::secondary)
             .on_press(Message::UpdateLater),
     )
-    .into()
+    .boxed()
 }
 
 fn first_run(app: &App) -> El<'_> {
     use crate::fmt;
     let total: u64 = app.download.iter().map(|d| d.total.unwrap_or(0)).sum();
     let received: u64 = app.download.iter().map(|d| d.received).sum();
-    let mut files = column![].spacing(ui::GAP_ROW);
+    let mut files = ui::col().spacing(ui::GAP_ROW);
     for name in rufa_data::update::FILES {
         let (done, fraction, size) = match app.download.iter().find(|d| d.file == name) {
             Some(d) => {
@@ -289,7 +293,7 @@ fn first_run(app: &App) -> El<'_> {
         } else {
             theme::ACCENT
         };
-        files = files.push(
+        files = files.add(
             column![
                 row![
                     ui::body(describe_file(name)).width(Length::Fill),
@@ -326,9 +330,9 @@ fn first_run(app: &App) -> El<'_> {
         files,
     ]
     .spacing(16)
-    .max_width(520);
+    .width(Length::Shrink.max(520));
     if let Some(error) = &app.download_error {
-        card = card.push(
+        card = card.add(
             container(
                 column![
                     ui::body(error.clone()),
@@ -340,21 +344,21 @@ fn first_run(app: &App) -> El<'_> {
             .width(Length::Fill)
             .style(theme::banner(theme::DANGER_FILL, theme::DANGER_LINE)),
         );
-        card = card.push(
+        card = card.add(
             button(text("Try again").size(ui::BODY))
                 .padding(ui::pill_tall(ui::PAD_WIDE))
                 .style(theme::primary)
                 .on_press(Message::RetryDownload),
         );
     } else {
-        card = card.push(ui::small(format!(
+        card = card.add(ui::small(format!(
             "Saved to {}",
             rufa_data::data_dir().display()
         )));
     }
     container(container(card).padding(ui::PAD_CARD).style(theme::card))
         .center(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn describe_file(name: &str) -> &'static str {
@@ -434,7 +438,7 @@ fn center(app: &App) -> El<'_> {
     column![tabs, body]
         .spacing(ui::GAP_ROW)
         .height(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn toolbar(app: &App) -> El<'_> {
@@ -458,7 +462,7 @@ fn toolbar(app: &App) -> El<'_> {
                 .color(theme::ACCENT)
         )
         .padding([0.0, ui::GAP_ROW]),
-        text_input("Fit name", &name)
+        text_input("Fit name", name)
             .on_input(Message::RenameFit)
             .width(260)
             .size(ui::BODY)
@@ -476,8 +480,8 @@ fn toolbar(app: &App) -> El<'_> {
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
 
-    bar = bar.push(space().width(Length::Fill));
-    bar = bar.push(ui::label("SKILLS"));
+    bar = bar.add(space().width(Length::Fill));
+    bar = bar.add(ui::label("SKILLS"));
     let mut who: Vec<(String, bool, Message)> = [0u8, 5]
         .into_iter()
         .map(|level| {
@@ -495,14 +499,14 @@ fn toolbar(app: &App) -> El<'_> {
             Message::ChooseCharacter(CharChoice::Saved(i)),
         ));
     }
-    bar = bar.push(ui::segmented(who));
+    bar = bar.add(ui::segmented(who));
     container(bar)
         .padding([0.0, ui::PAD])
         .height(ui::TOOLBAR)
         .width(Length::Fill)
         .align_y(iced::Alignment::Center)
         .style(theme::toolbar)
-        .into()
+        .boxed()
 }
 
 fn status_bar(app: &App) -> El<'_> {
@@ -510,31 +514,31 @@ fn status_bar(app: &App) -> El<'_> {
         .spacing(ui::PAD)
         .align_y(iced::Alignment::Center);
     if app.prices_pending {
-        bar = bar.push(ui::label("prices"));
+        bar = bar.add(ui::label("prices"));
     }
     let scale = app.settings.ui_scale;
-    bar = bar.push(ui::label("ZOOM"));
-    bar = bar.push(
+    bar = bar.add(ui::label("ZOOM"));
+    bar = bar.add(
         button(text("−").size(ui::SMALL))
             .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
             .on_press(Message::Zoom(crate::ZoomStep::Out)),
     );
-    bar = bar.push(ui::small(format!("{:.0}%", scale * 100.0)));
-    bar = bar.push(
+    bar = bar.add(ui::small(format!("{:.0}%", scale * 100.0)));
+    bar = bar.add(
         button(text("+").size(ui::SMALL))
             .padding(ui::pill_tight(ui::GAP_ROW))
             .style(theme::ghost)
             .on_press(Message::Zoom(crate::ZoomStep::In)),
     );
-    bar = bar.push(
+    bar = bar.add(
         button(text("Check for updates").size(ui::SMALL))
             .padding(ui::pill(ui::PAD))
             .style(theme::ghost)
             .on_press(Message::CheckUpdate),
     );
     if let Some(tag) = &app.sde_update {
-        bar = bar.push(
+        bar = bar.add(
             button(text(format!("Update game data to {tag}")).size(ui::SMALL))
                 .padding(ui::pill(ui::PAD))
                 .style(theme::secondary)
@@ -547,5 +551,5 @@ fn status_bar(app: &App) -> El<'_> {
         .width(Length::Fill)
         .align_y(iced::Alignment::Center)
         .style(theme::toolbar)
-        .into()
+        .boxed()
 }

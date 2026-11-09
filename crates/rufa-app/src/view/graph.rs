@@ -1,3 +1,4 @@
+use iced::widget::Widget;
 use iced::widget::canvas::{self, Frame, Path, Stroke, Text};
 use iced::widget::{button, canvas as canvas_widget, column, row, text, text_input};
 use iced::{Color, Element, Length, Point, Rectangle, Renderer, Theme, mouse};
@@ -6,13 +7,14 @@ use rufa_sim::graph::{self, Curve};
 use crate::fmt;
 use crate::theme;
 use crate::ui;
+use crate::ui::Add;
 use crate::{App, GraphKind, Message};
 
 const COLORS: [Color; 6] = theme::SERIES;
 
 pub fn view(app: &App) -> Element<'_, Message> {
     let Some(ids) = app.ids else {
-        return text("No game data").into();
+        return text("No game data").boxed();
     };
     let kinds = ui::segmented(
         [
@@ -56,9 +58,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
         })
         .collect();
 
-    let mut legend = row![].spacing(12);
+    let mut legend = ui::line().spacing(12);
     for (i, (name, _)) in series.iter().enumerate() {
-        legend = legend.push(
+        legend = legend.add(
             text(name.clone())
                 .size(ui::BODY)
                 .font(theme::UI_MEDIUM)
@@ -70,14 +72,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .spacing(3)
         .align_y(iced::Alignment::Center);
     for (i, p) in app.targets.iter().enumerate() {
-        profiles = profiles.push(
+        profiles = profiles.add(
             button(text(&p.name).size(ui::MICRO))
                 .padding(ui::pill_tight(6.0))
                 .style(theme::chip(app.target == i))
                 .on_press(Message::TargetProfile(i)),
         );
         if !builtin.iter().any(|b| b.name == p.name) {
-            profiles = profiles.push(
+            profiles = profiles.add(
                 button(text("\u{00d7}").size(ui::MICRO))
                     .padding(ui::pill_tight(ui::GAP))
                     .style(theme::ghost)
@@ -97,7 +99,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     for (i, label) in ["EM", "Th", "Kin", "Exp"].iter().enumerate() {
-        editor = editor.push(
+        editor = editor.add(
             row![
                 ui::label(*label),
                 text_input("0%", &app.target_resists[i])
@@ -111,7 +113,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .align_y(iced::Alignment::Center),
         );
     }
-    editor = editor.push(
+    editor = editor.add(
         button(text("Save").size(ui::SMALL))
             .padding(ui::pill(ui::PAD_WIDE))
             .style(theme::secondary)
@@ -168,7 +170,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     ]
     .spacing(ui::GAP_ROW)
     .height(Length::Fill)
-    .into()
+    .boxed()
 }
 
 fn cap_view<'a>(app: &'a App, kinds: Element<'a, Message>) -> Element<'a, Message> {
@@ -188,9 +190,9 @@ fn cap_view<'a>(app: &'a App, kinds: Element<'a, Message>) -> Element<'a, Messag
             (app.fit_title(doc), Curve { points })
         })
         .collect();
-    let mut legend = row![].spacing(12);
+    let mut legend = ui::line().spacing(12);
     for (i, (name, _)) in series.iter().enumerate() {
-        legend = legend.push(
+        legend = legend.add(
             text(name.clone())
                 .size(ui::BODY)
                 .font(theme::UI_MEDIUM)
@@ -209,7 +211,7 @@ fn cap_view<'a>(app: &'a App, kinds: Element<'a, Message>) -> Element<'a, Messag
     column![kinds, legend, plot]
         .spacing(6)
         .height(Length::Fill)
-        .into()
+        .boxed()
 }
 
 struct Plot {

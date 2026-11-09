@@ -1,4 +1,5 @@
 use iced::Length;
+use iced::widget::Widget;
 use iced::widget::{
     button, column, container, image, mouse_area, row, space, text, text_input, tooltip,
 };
@@ -6,6 +7,7 @@ use rufa_data::catalog::MARKET_ROOTS;
 
 use crate::fmt;
 use crate::theme;
+use crate::ui::Add;
 use crate::ui::{self, El};
 use rufa_data::icons::Kind;
 
@@ -38,7 +40,7 @@ pub fn view(app: &App) -> El<'_> {
     column![tabs, body]
         .spacing(ui::GAP_ROW)
         .height(Length::Fill)
-        .into()
+        .boxed()
 }
 
 fn search<'a>(placeholder: &'a str, value: &'a str, on_input: fn(String) -> Message) -> El<'a> {
@@ -47,7 +49,7 @@ fn search<'a>(placeholder: &'a str, value: &'a str, on_input: fn(String) -> Mess
         .size(ui::BODY)
         .padding(ui::field(5.0, 8.0))
         .style(theme::input)
-        .into()
+        .boxed()
 }
 
 /// The type's own picture, or the space it would take, so names stay aligned.
@@ -57,14 +59,14 @@ fn icon_cell<'a>(app: &App, type_id: i32, size: f32) -> El<'a> {
             .width(size)
             .height(size)
             .border_radius(3.0)
-            .into(),
-        None => space().width(size).height(size).into(),
+            .boxed(),
+        None => space().width(size).height(size).boxed(),
     };
     container(inner)
         .width(size)
         .height(size)
         .style(theme::rounded(theme::SUNKEN, 3.0))
-        .into()
+        .boxed()
 }
 
 fn list_button<'a>(app: &App, type_id: i32, label: String, msg: Message) -> El<'a> {
@@ -82,7 +84,7 @@ fn list_button<'a>(app: &App, type_id: i32, label: String, msg: Message) -> El<'
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
-    .into()
+    .boxed()
 }
 
 fn group_button<'a>(label: String, count: usize, msg: Message) -> El<'a> {
@@ -110,7 +112,7 @@ fn group_button<'a>(label: String, count: usize, msg: Message) -> El<'a> {
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
-    .into()
+    .boxed()
 }
 
 fn back_button<'a>(label: String, msg: Message) -> El<'a> {
@@ -123,15 +125,15 @@ fn back_button<'a>(label: String, msg: Message) -> El<'a> {
     .width(Length::Fill)
     .style(theme::ghost)
     .on_press(msg)
-    .into()
+    .boxed()
 }
 
 fn ships(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
-        return ui::muted("No game data loaded").into();
+        return ui::muted("No game data loaded").boxed();
     };
     let query = app.ship_search.trim().to_lowercase();
-    let mut list = column![].spacing(1);
+    let mut list = ui::col().spacing(1);
     if !query.is_empty() {
         let mut hits = 0;
         for group in game.catalog.hull_groups() {
@@ -141,17 +143,17 @@ fn ships(app: &App) -> El<'_> {
                     continue;
                 }
                 hits += 1;
-                list = list.push(hull_button(app, &hull.name, &group.name, hull.id));
+                list = list.add(hull_button(app, &hull.name, &group.name, hull.id));
             }
         }
         if hits == 0 {
-            list = list.push(text("No matches").size(ui::SMALL).color(theme::FAINT));
+            list = list.add(text("No matches").size(ui::SMALL).color(theme::FAINT));
         }
     } else if let Some(group_id) = app.ship_group {
         if let Some(group) = game.catalog.hull_groups().iter().find(|g| g.id == group_id) {
-            list = list.push(back_button(group.name.clone(), Message::ShipGroup(None)));
+            list = list.add(back_button(group.name.clone(), Message::ShipGroup(None)));
             for hull in &group.hulls {
-                list = list.push(list_button(
+                list = list.add(list_button(
                     app,
                     hull.id,
                     hull.name.clone(),
@@ -161,7 +163,7 @@ fn ships(app: &App) -> El<'_> {
         }
     } else {
         for group in game.catalog.hull_groups() {
-            list = list.push(group_button(
+            list = list.add(group_button(
                 group.name.clone(),
                 group.hulls.len(),
                 Message::ShipGroup(Some(group.id)),
@@ -178,7 +180,7 @@ fn ships(app: &App) -> El<'_> {
         ui::scroll(list).height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
-    .into()
+    .boxed()
 }
 
 fn hull_button<'a>(app: &App, name: &str, group: &str, id: i32) -> El<'a> {
@@ -204,12 +206,12 @@ fn hull_button<'a>(app: &App, name: &str, group: &str, id: i32) -> El<'a> {
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(Message::NewFit(id))
-    .into()
+    .boxed()
 }
 
 fn fits(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
-        return ui::muted("No game data loaded").into();
+        return ui::muted("No game data loaded").boxed();
     };
     let query = app.fit_search.trim().to_lowercase();
     let open = |fit: &rufa_store::SavedFit| {
@@ -218,9 +220,9 @@ fn fits(app: &App) -> El<'_> {
             .any(|d| d.path.as_deref() == Some(fit.path.as_path()))
     };
 
-    let mut list = column![].spacing(1);
+    let mut list = ui::col().spacing(1);
     if app.saved.is_empty() {
-        list = list.push(
+        list = list.add(
             text("None yet. Ctrl+S saves the open fit.")
                 .size(ui::SMALL)
                 .color(theme::FAINT),
@@ -229,7 +231,7 @@ fn fits(app: &App) -> El<'_> {
         for (group_id, group_name, hulls) in fit_tree(app, game) {
             let folded = app.fits_folded.contains(&group_id);
             let count = hulls.iter().map(|(_, f)| f.len()).sum::<usize>();
-            list = list.push(
+            list = list.add(
                 container(fold_button(
                     &group_name,
                     count,
@@ -245,9 +247,9 @@ fn fits(app: &App) -> El<'_> {
                 let count = fits.len();
                 let mut branch = column![hull_header(app, hull, count)].spacing(1);
                 for fit in fits {
-                    branch = branch.push(fit_row(app, fit, open(fit), None, 22.0));
+                    branch = branch.add(fit_row(app, fit, open(fit), None, 22.0));
                 }
-                list = list.push(
+                list = list.add(
                     row![
                         container(space().width(1).height(Length::Fill))
                             .style(theme::fill(theme::EDGE)),
@@ -275,11 +277,11 @@ fn fits(app: &App) -> El<'_> {
             .collect();
         hits.sort_by_key(|f| f.name.to_lowercase());
         if hits.is_empty() {
-            list = list.push(text("No matches").size(ui::SMALL).color(theme::FAINT));
+            list = list.add(text("No matches").size(ui::SMALL).color(theme::FAINT));
         }
         for fit in hits {
             let hull = fit.hull.map(|h| app.type_name(h)).unwrap_or("");
-            list = list.push(fit_row(app, fit, open(fit), Some(hull), 4.0));
+            list = list.add(fit_row(app, fit, open(fit), Some(hull), 4.0));
         }
     }
 
@@ -307,15 +309,15 @@ fn fits(app: &App) -> El<'_> {
             button(text("Looking").size(ui::SMALL))
                 .padding(ui::pill(ui::PAD))
                 .style(theme::ghost)
-                .into()
+                .boxed()
         } else {
             button(text("Find duplicates").size(ui::SMALL))
                 .padding(ui::pill(ui::PAD))
                 .style(theme::ghost)
                 .on_press(Message::FindDuplicates)
-                .into()
+                .boxed()
         };
-        actions = actions.push(find);
+        actions = actions.add(find);
     }
 
     column![
@@ -326,14 +328,14 @@ fn fits(app: &App) -> El<'_> {
         ui::scroll(list).height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
-    .into()
+    .boxed()
 }
 
 /// The same shape as a stats section: a name, the number that matters, and
 /// one fact per row. Seven thousand file names say less than three counts.
 fn duplicate_panel(app: &App) -> El<'_> {
     if app.duplicates.is_empty() {
-        return space().height(0).into();
+        return space().height(0).boxed();
     }
     let going: usize = app.duplicates.iter().map(|d| d.remove.len()).sum();
     let fits = app.duplicates.len();
@@ -368,7 +370,7 @@ fn duplicate_panel(app: &App) -> El<'_> {
     .padding([ui::GAP_ROW, ui::PAD])
     .width(Length::Fill)
     .style(theme::card)
-    .into()
+    .boxed()
 }
 
 type FitTree<'a> = Vec<(i32, String, Vec<(i32, Vec<&'a rufa_store::SavedFit>)>)>;
@@ -428,7 +430,7 @@ fn hull_header<'a>(app: &App, hull: i32, count: usize) -> El<'a> {
         left: 4.0,
     })
     .align_y(iced::Alignment::Center)
-    .into()
+    .boxed()
 }
 
 fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<'a> {
@@ -454,7 +456,7 @@ fn fold_button<'a>(label: &str, count: usize, folded: bool, msg: Message) -> El<
     .width(Length::Fill)
     .style(theme::list_item(false))
     .on_press(msg)
-    .into()
+    .boxed()
 }
 
 fn fit_row<'a>(
@@ -478,7 +480,7 @@ fn fit_row<'a>(
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     if let Some(hull) = hull {
-        line = line.push(text(hull).size(ui::MICRO).color(theme::MUTED));
+        line = line.add(text(hull).size(ui::MICRO).color(theme::MUTED));
     }
     // Copying and deleting are not offered at rest, only under the cursor.
     // The whole row carries the hover, so moving onto a button keeps it.
@@ -506,9 +508,9 @@ fn fit_row<'a>(
             action("\u{00d7}", "Delete", Message::DeleteSaved(fit.path.clone())),
         ]
         .spacing(ui::GAP_ROW)
-        .into()
+        .boxed()
     } else {
-        space().width(58).into()
+        space().width(58).boxed()
     };
     mouse_area(
         row![
@@ -529,12 +531,12 @@ fn fit_row<'a>(
     )
     .on_enter(Message::HoverSaved(Some(fit.path.clone())))
     .on_exit(Message::HoverSaved(None))
-    .into()
+    .boxed()
 }
 
 fn market(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
-        return ui::muted("No game data loaded").into();
+        return ui::muted("No game data loaded").boxed();
     };
     let mut modes = row![
         ui::label("ADD TO"),
@@ -556,7 +558,7 @@ fn market(app: &App) -> El<'_> {
     .spacing(ui::GAP)
     .align_y(iced::Alignment::Center);
     if let Some(rack) = app.market_rack {
-        modes = modes.push(
+        modes = modes.add(
             button(text(format!("{} only  ×", rack.label())).size(ui::MICRO))
                 .padding(ui::pill_tight(7.0))
                 .style(theme::chip(true))
@@ -572,7 +574,7 @@ fn market(app: &App) -> El<'_> {
         rufa_sim::place::placement(&game.info(), &ids, type_id)
             == Some(rufa_sim::place::Placement::Module(rack))
     };
-    let mut list = column![].spacing(1);
+    let mut list = ui::col().spacing(1);
 
     if app.market_search.trim().len() >= 2 || app.market_rack.is_some() {
         let mut any = false;
@@ -581,7 +583,7 @@ fn market(app: &App) -> El<'_> {
                 continue;
             }
             any = true;
-            list = list.push(list_button(
+            list = list.add(list_button(
                 app,
                 *id,
                 game.type_name(*id).to_string(),
@@ -594,14 +596,14 @@ fn market(app: &App) -> El<'_> {
             } else {
                 "No matches"
             };
-            list = list.push(text(hint).size(ui::SMALL).color(theme::FAINT));
+            list = list.add(text(hint).size(ui::SMALL).color(theme::FAINT));
         }
     } else {
         match app.market_group.and_then(|id| game.catalog.market_node(id)) {
             None => {
                 for root in MARKET_ROOTS {
                     if let Some(node) = game.catalog.market_node(root) {
-                        list = list.push(group_button(
+                        list = list.add(group_button(
                             node.name.clone(),
                             node.children.len(),
                             Message::MarketGroup(Some(root)),
@@ -616,10 +618,10 @@ fn market(app: &App) -> El<'_> {
                 } else {
                     parent
                 };
-                list = list.push(back_button(node.name.clone(), Message::MarketGroup(up)));
+                list = list.add(back_button(node.name.clone(), Message::MarketGroup(up)));
                 for child in &node.children {
                     if let Some(c) = game.catalog.market_node(*child) {
-                        list = list.push(group_button(
+                        list = list.add(group_button(
                             c.name.clone(),
                             c.children.len() + c.types.len(),
                             Message::MarketGroup(Some(*child)),
@@ -633,7 +635,7 @@ fn market(app: &App) -> El<'_> {
                     .collect();
                 types.sort();
                 for (name, id) in types {
-                    list = list.push(list_button(app, id, name.to_string(), Message::AddItem(id)));
+                    list = list.add(list_button(app, id, name.to_string(), Message::AddItem(id)));
                 }
             }
         }
@@ -651,12 +653,12 @@ fn market(app: &App) -> El<'_> {
         .height(Length::Fill),
     ]
     .spacing(ui::GAP_ROW)
-    .into()
+    .boxed()
 }
 
 fn character(app: &App) -> El<'_> {
     let Ok(game) = &app.game else {
-        return ui::muted("No game data loaded").into();
+        return ui::muted("No game data loaded").boxed();
     };
     let mut options = vec![
         ("All 0".to_string(), CharChoice::All(0)),
@@ -733,10 +735,10 @@ fn character(app: &App) -> El<'_> {
             esi_hint,
         ]
         .spacing(ui::GAP_ROW)
-        .into();
+        .boxed();
     };
     let Some(current) = app.characters.get(i) else {
-        return picker.into();
+        return picker.boxed();
     };
 
     let header = row![
@@ -772,7 +774,7 @@ fn character(app: &App) -> El<'_> {
     .align_y(iced::Alignment::Center);
 
     let query = app.skill_search.trim().to_lowercase();
-    let mut list = column![].spacing(1);
+    let mut list = ui::col().spacing(1);
     for group in game.catalog.skill_groups() {
         let skills: Vec<_> = group
             .hulls
@@ -782,19 +784,19 @@ fn character(app: &App) -> El<'_> {
         if skills.is_empty() {
             continue;
         }
-        list = list.push(container(ui::eyebrow(&group.name)).padding([ui::GAP_ROW, ui::TIGHT]));
+        list = list.add(container(ui::eyebrow(&group.name)).padding([ui::GAP_ROW, ui::TIGHT]));
         for skill in skills {
             let level = current.skills.get(&skill.id).copied().unwrap_or(0);
-            let mut levels = row![].spacing(1);
+            let mut levels = ui::line().spacing(1);
             for l in 0..=5u8 {
-                levels = levels.push(
+                levels = levels.add(
                     button(text(l.to_string()).size(ui::MICRO))
                         .padding(ui::pill_tight(5.0))
                         .style(theme::chip(l == level))
                         .on_press(Message::SetSkill(skill.id, l)),
                 );
             }
-            list = list.push(
+            list = list.add(
                 container(
                     row![
                         container(
@@ -824,5 +826,5 @@ fn character(app: &App) -> El<'_> {
         ui::scroll(list).height(Length::Fill)
     ]
     .spacing(ui::GAP_ROW)
-    .into()
+    .boxed()
 }
