@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 iced.workspace = true
+image.workspace = true
 rufa-data.workspace = true
 rufa-sim.workspace = true
 rufa-store.workspace = true
