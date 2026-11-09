@@ -1,16 +1,22 @@
+pub mod ammo;
 pub mod apply;
 pub mod cycles;
 pub mod damage;
 pub mod dealers;
 pub mod dmg;
 pub mod effects;
+pub mod ewar;
 pub mod model;
+pub mod motion;
+pub mod plot;
+pub mod regen;
+pub mod reps;
 pub mod sample;
 pub mod tackle;
 pub mod target;
 pub mod timeline;
 
-use rufa_data::Info;
+use rufa_data::{Catalog, Info};
 
 pub use effects::EffectIds;
 pub use model::*;
@@ -20,6 +26,7 @@ pub struct Ctx<'a, I: Info> {
     pub info: &'a I,
     pub ids: &'a AttrIds,
     pub fx: &'a EffectIds,
+    pub catalog: &'a Catalog,
 }
 
 /// The radius of an item: the attribute when the engine has it, else the

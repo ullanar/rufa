@@ -207,6 +207,8 @@ pub struct Options {
     pub ancillary_reload: bool,
     pub ehp: bool,
     pub ammo_tier: AmmoTier,
+    /// Fold reload time into steady figures, the fit's own setting.
+    pub reload: bool,
 }
 
 impl Default for Options {
@@ -221,6 +223,7 @@ impl Default for Options {
             ancillary_reload: true,
             ehp: false,
             ammo_tier: AmmoTier::Navy,
+            reload: false,
         }
     }
 }

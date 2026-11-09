@@ -52,6 +52,7 @@ impl World {
             info: &self.info,
             ids: &self.ids,
             fx: &self.fx,
+            catalog: &self.game.catalog,
         }
     }
 
