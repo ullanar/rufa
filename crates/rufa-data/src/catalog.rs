@@ -84,6 +84,7 @@ pub struct Catalog {
     environments: Vec<TypeRef>,
     variations: HashMap<(i32, i32), Vec<TypeRef>>,
     charges_by_group: HashMap<i32, Vec<TypeRef>>,
+    effects: HashMap<String, i32>,
 }
 
 const BEACON_GROUPS: [i32; 2] = [920, 1983];
@@ -257,6 +258,12 @@ impl Catalog {
             environments,
             variations,
             charges_by_group,
+            effects: raw
+                .dogma_effects()
+                .into_iter()
+                .flatten()
+                .map(|e| (e.name().to_string(), e.id()))
+                .collect(),
         };
         catalog.sort_market_children();
         catalog
@@ -307,6 +314,10 @@ impl Catalog {
 
     pub fn attr_label(&self, attribute_id: i32) -> Option<&AttrLabel> {
         self.attr_labels.get(&attribute_id)
+    }
+
+    pub fn effect_id(&self, name: &str) -> Option<i32> {
+        self.effects.get(name).copied()
     }
 
     pub fn group_name(&self, group_id: i32) -> &str {
