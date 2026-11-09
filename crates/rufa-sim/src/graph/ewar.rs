@@ -301,6 +301,12 @@ pub struct Prepared {
     time_entries: Vec<Entry>,
 }
 
+impl Prepared {
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
 pub fn prepare<I: Info>(
     ctx: &Ctx<'_, I>,
     req: &Request,

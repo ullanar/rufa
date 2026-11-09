@@ -15,6 +15,8 @@ pub const CAP_HORIZON: f64 = 1800.0;
 pub struct Document {
     pub fit: Fit,
     pub calc: Calculation,
+    /// Counts up on every recalculation, so a reader can tell a change.
+    pub rev: u64,
     pub stats: Stats,
     pub layout: SlotLayout,
     pub last_calc: Duration,
@@ -33,6 +35,7 @@ impl Document {
             layout: SlotLayout::from_calc(ids, &calc),
             cap: crate::cap::simulate_fit(ids, &fit, &calc, 0.0, CAP_HORIZON),
             last_calc: start.elapsed(),
+            rev: 0,
             calc,
             fit,
             projections: Vec::new(),
@@ -103,5 +106,6 @@ impl Document {
             CAP_HORIZON,
         );
         self.last_calc = start.elapsed();
+        self.rev += 1;
     }
 }

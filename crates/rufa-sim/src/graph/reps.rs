@@ -257,6 +257,12 @@ pub struct Prepared {
     reppers: Vec<Repper>,
 }
 
+impl Prepared {
+    pub fn is_empty(&self) -> bool {
+        self.reppers.is_empty()
+    }
+}
+
 pub fn prepare<I: Info>(
     ctx: &Ctx<'_, I>,
     req: &Request,

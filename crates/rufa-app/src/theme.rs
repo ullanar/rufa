@@ -375,6 +375,19 @@ pub fn input(_theme: &Theme, status: text_input::Status) -> text_input::Style {
     }
 }
 
+pub fn input_bad(theme: &Theme, status: text_input::Status) -> text_input::Style {
+    let mut style = input(theme, status);
+    style.border.color = DANGER_LINE;
+    style
+}
+
+pub fn legend(_theme: &Theme, status: button::Status) -> button::Style {
+    match status {
+        button::Status::Hovered => flat(Some(OVERLAY), TEXT, None, 4.0),
+        _ => flat(Some(Color { a: 0.8, ..RAISED }), TEXT, None, 4.0),
+    }
+}
+
 pub fn picker(_theme: &Theme, status: pick_list::Status) -> pick_list::Style {
     let line = match status {
         pick_list::Status::Opened { .. } => ACCENT_LINE,

@@ -460,16 +460,14 @@ fn defense<'a>(app: &'a App, s: &'a Stats, avail: f32) -> El<'a> {
 
 fn offense<'a>(app: &'a App, doc: &'a crate::Doc, s: &'a Stats, avail: f32) -> El<'a> {
     let o = &s.offense;
-    let target = app.graph_target();
-    let applied = app
-        .ids
-        .map(|ids| rufa_sim::graph::dps_at(&ids, &doc.doc.fit, &doc.doc.calc, 0.0, &target))
-        .unwrap_or(0.0);
-    let target_name = app
-        .targets
-        .get(app.target)
-        .map(|p| p.name.as_str())
-        .unwrap_or("target");
+    let profile = app
+        .graph
+        .targets_on
+        .iter()
+        .find_map(|i| app.targets.get(*i))
+        .or_else(|| app.targets.first());
+    let applied = profile.map(|p| app.applied_dps(doc, p)).unwrap_or(0.0);
+    let target_name = profile.map(|p| p.name.as_str()).unwrap_or("target");
     let colors = [theme::EM, theme::THERMAL, theme::KINETIC, theme::EXPLOSIVE];
     let total: f64 = o.damage.iter().fold(0.0, |sum, part| sum + part);
     let mut legend = ui::line().spacing(ui::GAP_ROW);

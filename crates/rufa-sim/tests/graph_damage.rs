@@ -257,3 +257,38 @@ fn damage_over_time_climbs_in_steps_and_dps_holds() {
     let (at_ten, _) = series(&ctx, &req, &src, &tgt).unwrap();
     assert!(at_ten[0].1 > volley * 2.0, "{:?}", at_ten[0]);
 }
+
+const DRAKE: &str = "[Drake Navy Issue, drones]
+Ballistic Control System II
+
+Heavy Missile Launcher II, Scourge Heavy Missile
+Heavy Missile Launcher II, Scourge Heavy Missile
+
+Hobgoblin II x5
+";
+
+#[test]
+fn drones_join_the_missiles_up_close_and_drop_out_past_their_range() {
+    let Some(w) = world() else { return };
+    let ctx = w.ctx();
+    let (fit, calc) = w.fit(DRAKE);
+    let src = prepare(&ctx, &fit, &calc, false);
+    assert_eq!(src.dealers.len(), 3, "{:?}", src.dealers.len());
+    let ideal = Profile::ideal();
+    let tgt = against(&ctx, Target::Profile(&ideal));
+    let req = Request::new(Kind::Damage);
+    let drones = calc.ship.attributes[&w.ids.drone_dps].value;
+    let guns = calc.ship.attributes[&w.ids.dps].value - drones;
+    let near = point(&ctx, &req, &src, &tgt, 1.0).unwrap();
+    assert!(
+        close(near, guns + drones * 1.01505, 1e-6),
+        "near {near} vs {guns} + {drones}"
+    );
+    let control = src.src.drone_control_range / 1000.0;
+    let beyond = point(&ctx, &req, &src, &tgt, control + 1.0).unwrap();
+    assert!(
+        close(beyond, guns, 1e-6) || beyond < guns,
+        "beyond drone range {beyond} vs {guns}"
+    );
+    assert!(beyond < near - drones * 0.9);
+}

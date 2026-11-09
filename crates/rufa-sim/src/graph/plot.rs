@@ -71,11 +71,17 @@ pub fn plot<I: Info>(
             }
             Kind::Ewar => {
                 let prepared = ewar::prepare(ctx, req, src.fit, src.calc);
+                if prepared.is_empty() {
+                    continue;
+                }
                 let (p, step) = ewar::series(&prepared, req);
                 (p, step, Vec::new())
             }
             Kind::Reps => {
                 let prepared = reps::prepare(ctx, req, src.fit, src.calc);
+                if prepared.is_empty() {
+                    continue;
+                }
                 match reps::series(&prepared, req) {
                     Some((p, step)) => (p, step, Vec::new()),
                     None => {
