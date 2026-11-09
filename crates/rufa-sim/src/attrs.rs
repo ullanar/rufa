@@ -8,6 +8,15 @@ macro_rules! attr_ids {
         }
 
         impl AttrIds {
+            /// Distinct ids with no SDE behind them, for unit tests of pure math.
+            #[cfg(test)]
+            pub fn placeholder() -> AttrIds {
+                let mut next = 0;
+                AttrIds {
+                    $($field: { next += 1; next },)*
+                }
+            }
+
             pub fn resolve(sde: &Sde) -> Result<AttrIds, String> {
                 Ok(AttrIds {
                     $($field: sde
@@ -152,4 +161,66 @@ attr_ids! {
     kinetic_damage = "kineticDamage",
     explosive_damage = "explosiveDamage",
     tech_level = "techLevel",
+    optimal_sig_radius = "optimalSigRadius",
+    radius = "radius",
+    speed = "speed",
+    damage_multiplier = "damageMultiplier",
+    damage_multiplier_bonus_per_cycle = "damageMultiplierBonusPerCycle",
+    repair_multiplier_bonus_per_cycle = "repairMultiplierBonusPerCycle",
+    module_reactivation_delay = "moduleReactivationDelay",
+    charge_rate = "chargeRate",
+    crystals_get_damaged = "crystalsGetDamaged",
+    crystal_volatility_damage = "crystalVolatilityDamage",
+    crystal_volatility_chance = "crystalVolatilityChance",
+    mass_addition = "massAddition",
+    scan_speed = "scanSpeed",
+    falloff_effectiveness = "falloffEffectiveness",
+    max_fof_target_range = "maxFOFTargetRange",
+    explosion_range = "explosionRange",
+    aoe_damage_reduction_sensitivity = "aoeDamageReductionSensitivity",
+    weapon_range_multiplier = "weaponRangeMultiplier",
+    falloff_multiplier = "fallofMultiplier",
+    tracking_speed_multiplier = "trackingSpeedMultiplier",
+    speed_factor = "speedFactor",
+    signature_radius_bonus = "signatureRadiusBonus",
+    max_target_range_bonus = "maxTargetRangeBonus",
+    max_range_bonus = "maxRangeBonus",
+    missile_velocity_bonus = "missileVelocityBonus",
+    explosion_delay_bonus = "explosionDelayBonus",
+    scan_resolution_bonus = "scanResolutionBonus",
+    energy_neutralizer_amount = "energyNeutralizerAmount",
+    energy_neutralizer_range_optimal = "energyNeutralizerRangeOptimal",
+    energy_neutralizer_duration = "energyNeutralizerDuration",
+    energy_neutralizer_signature_resolution = "energyNeutralizerSignatureResolution",
+    warp_scramble_range = "warpScrambleRange",
+    activation_blocked_strength = "activationBlockedStrenght",
+    disallow_offensive_modifiers = "disallowOffensiveModifiers",
+    doomsday_aoe_range = "doomsdayAOERange",
+    fighter_web_speed_penalty = "fighterAbilityStasisWebifierSpeedPenalty",
+    fighter_web_optimal = "fighterAbilityStasisWebifierOptimalRange",
+    fighter_web_falloff = "fighterAbilityStasisWebifierFalloffRange",
+    fighter_neut_amount = "fighterAbilityEnergyNeutralizerAmount",
+    fighter_neut_duration = "fighterAbilityEnergyNeutralizerDuration",
+    fighter_neut_optimal = "fighterAbilityEnergyNeutralizerOptimalRange",
+    fighter_neut_falloff = "fighterAbilityEnergyNeutralizerFalloffRange",
+    fighter_ecm_gravimetric = "fighterAbilityECMStrengthGravimetric",
+    fighter_ecm_ladar = "fighterAbilityECMStrengthLadar",
+    fighter_ecm_magnetometric = "fighterAbilityECMStrengthMagnetometric",
+    fighter_ecm_radar = "fighterAbilityECMStrengthRadar",
+    fighter_refueling_time = "fighterRefuelingTime",
+    missile_launch_duration = "missileLaunchDuration",
+    duration_high_is_good = "durationHighisGood",
+    dot_duration = "dotDuration",
+    dot_max_damage_per_tick = "dotMaxDamagePerTick",
+    dot_max_hp_percentage_per_tick = "dotMaxHPPercentagePerTick",
+    breacher_pod_damage_resistance = "breacherPodDamageResistance",
+    damage_delay_duration = "damageDelayDuration",
+    doomsday_warning_duration = "doomsdayWarningDuration",
+    doomsday_damage_duration = "doomsdayDamageDuration",
+    doomsday_damage_cycle_time = "doomsdayDamageCycleTime",
+    shield_transfer_range = "shieldTransferRange",
+    power_transfer_range = "powerTransferRange",
+    ecm_burst_range = "ecmBurstRange",
+    ecm_range_optimal = "ECMRangeOptimal",
+    nos_override = "nosOverride",
 }
