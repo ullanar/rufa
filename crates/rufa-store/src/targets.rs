@@ -6,8 +6,12 @@ const FILE: &str = "targets.txt";
 pub struct TargetProfile {
     pub name: String,
     pub resists: [f64; 4],
+    /// Zero means no signature limit at all.
     pub signature: f64,
     pub velocity: f64,
+    pub radius: f64,
+    /// Zero means endless hit points.
+    pub hp: f64,
 }
 
 impl TargetProfile {
@@ -19,6 +23,8 @@ impl TargetProfile {
             resists: [0.0; 4],
             signature: 0.0,
             velocity: 0.0,
+            radius: 0.0,
+            hp: 0.0,
         }
     }
 
@@ -42,43 +48,79 @@ impl TargetProfile {
             .split_whitespace()
             .filter_map(|v| v.parse().ok())
             .collect();
+        let body: Vec<f64> = parts
+            .next()
+            .unwrap_or("0 0")
+            .split_whitespace()
+            .filter_map(|v| v.parse().ok())
+            .collect();
         Some(TargetProfile {
             name: name.to_string(),
             resists: [resists[0], resists[1], resists[2], resists[3]],
             signature: rest.first().copied().unwrap_or(0.0),
             velocity: rest.get(1).copied().unwrap_or(0.0),
+            radius: body.first().copied().unwrap_or(0.0),
+            hp: body.get(1).copied().unwrap_or(0.0),
         })
     }
 
     fn to_line(&self) -> String {
         format!(
-            "{} | {:.4} {:.4} {:.4} {:.4} | {:.1} {:.1}",
+            "{} | {:.4} {:.4} {:.4} {:.4} | {:.1} {:.1} | {:.1} {:.0}",
             self.name,
             self.resists[0],
             self.resists[1],
             self.resists[2],
             self.resists[3],
             self.signature,
-            self.velocity
+            self.velocity,
+            self.radius,
+            self.hp
         )
     }
 }
 
 pub fn builtin() -> Vec<TargetProfile> {
-    let p = |name: &str, r: [f64; 4], sig: f64, vel: f64| TargetProfile {
+    let p = |name: &str, r: [f64; 4], sig: f64, vel: f64, radius: f64| TargetProfile {
         name: name.to_string(),
         resists: r,
         signature: sig,
         velocity: vel,
+        radius,
+        hp: 0.0,
     };
     vec![
         TargetProfile::ideal(),
-        p("Shield T2 frigate", [0.0, 0.2, 0.4, 0.5], 40.0, 1200.0),
-        p("Armor T2 frigate", [0.5, 0.35, 0.25, 0.1], 38.0, 900.0),
-        p("Shield T2 cruiser", [0.0, 0.2, 0.4, 0.5], 130.0, 450.0),
-        p("Armor T2 cruiser", [0.5, 0.35, 0.25, 0.1], 120.0, 300.0),
-        p("Battleship", [0.3, 0.3, 0.3, 0.3], 400.0, 120.0),
-        p("Structure", [0.2, 0.2, 0.2, 0.2], 0.0, 0.0),
+        p(
+            "Shield T2 frigate",
+            [0.0, 0.2, 0.4, 0.5],
+            40.0,
+            1200.0,
+            35.0,
+        ),
+        p(
+            "Armor T2 frigate",
+            [0.5, 0.35, 0.25, 0.1],
+            38.0,
+            900.0,
+            35.0,
+        ),
+        p(
+            "Shield T2 cruiser",
+            [0.0, 0.2, 0.4, 0.5],
+            130.0,
+            450.0,
+            120.0,
+        ),
+        p(
+            "Armor T2 cruiser",
+            [0.5, 0.35, 0.25, 0.1],
+            120.0,
+            300.0,
+            120.0,
+        ),
+        p("Battleship", [0.3, 0.3, 0.3, 0.3], 400.0, 120.0, 400.0),
+        p("Structure", [0.2, 0.2, 0.2, 0.2], 0.0, 0.0, 0.0),
     ]
 }
 
@@ -112,8 +154,12 @@ mod tests {
             resists: [0.1, 0.2, 0.3, 0.4],
             signature: 35.0,
             velocity: 1000.0,
+            radius: 30.0,
+            hp: 5000.0,
         };
         assert_eq!(TargetProfile::parse_line(&p.to_line()), Some(p));
         assert!(TargetProfile::parse_line("bad | 1 2").is_none());
+        let old = TargetProfile::parse_line("Old | 0.1 0.2 0.3 0.4 | 35 1000").unwrap();
+        assert_eq!((old.radius, old.hp), (0.0, 0.0));
     }
 }

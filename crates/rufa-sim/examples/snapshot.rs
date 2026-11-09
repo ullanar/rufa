@@ -392,17 +392,6 @@ fn main() {
             "{name}.cap.depleted_at = {:?}",
             doc.cap.depleted_at.map(|v| (v * 100.0).round() / 100.0)
         );
-        n(
-            &format!("{name}.graph.reach"),
-            rufa_sim::graph::reach(&ids, &fit, &doc.calc),
-        );
-        for step in 0..9 {
-            let d = step as f64 * 5_000.0;
-            n(
-                &format!("{name}.graph.dps.{step}"),
-                rufa_sim::graph::dps_at(&ids, &fit, &doc.calc, d, &rufa_sim::graph::Target::IDEAL),
-            );
-        }
         for (i, item) in doc.calc.items.iter().enumerate() {
             n(
                 &format!("{name}.item.{i}.dps"),

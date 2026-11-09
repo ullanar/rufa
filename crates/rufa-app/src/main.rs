@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod fmt;
+mod graphs;
 mod setup;
 mod theme;
 mod ui;
@@ -8,6 +9,7 @@ mod view;
 
 use std::path::PathBuf;
 
+use graphs::{GraphMsg, GraphState};
 use iced::keyboard::{self, Key, Modifiers};
 use iced::widget::{image, pane_grid};
 use iced::{Element, Subscription, Task, clipboard};
@@ -121,12 +123,6 @@ pub enum LeftTab {
 pub enum CenterTab {
     Fit,
     Graph,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GraphKind {
-    DpsOverDistance,
-    CapOverTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,11 +277,9 @@ pub enum Message {
     RetryDownload,
     CenterTab(CenterTab),
     Zoom(ZoomStep),
-    GraphKind(GraphKind),
-    GraphSignature(String),
-    GraphVelocity(String),
-    TargetProfile(usize),
+    Graph(GraphMsg),
     TargetName(String),
+    TargetNumber(usize, String),
     TargetResist(usize, String),
     SaveTargetProfile,
     DeleteTargetProfile(usize),
@@ -381,12 +375,11 @@ pub struct App {
     pub duplicates_pending: bool,
     pub show_ehp: bool,
     pub center: CenterTab,
-    pub graph_kind: GraphKind,
-    pub graph_signature: String,
-    pub graph_velocity: String,
+    pub graph: GraphState,
+    pub fx: Option<rufa_sim::graph::EffectIds>,
+    pub info: Option<rufa_data::InfoSde<'static>>,
     pub damages: Vec<rufa_store::DamagePattern>,
     pub targets: Vec<TargetProfile>,
-    pub target: usize,
     pub prices: PriceCache,
     pub prices_pending: bool,
     pub sde_update: Option<String>,
@@ -405,6 +398,7 @@ pub struct App {
     pub implant_sets: Vec<ImplantSet>,
     pub target_name: String,
     pub target_resists: [String; 4],
+    pub target_numbers: [String; 4],
     pub esi_pending: bool,
     pub pyfa_pending: bool,
     pub icons: std::collections::HashMap<(Kind, i32), image::Handle>,
@@ -476,12 +470,11 @@ impl App {
             hovered_saved: None,
             show_ehp: true,
             center: CenterTab::Fit,
-            graph_kind: GraphKind::DpsOverDistance,
-            graph_signature: String::new(),
-            graph_velocity: String::new(),
+            graph: GraphState::default(),
+            fx: None,
+            info: None,
             damages: Vec::new(),
             targets: Vec::new(),
-            target: 0,
             prices: PriceCache::default(),
             prices_pending: false,
             sde_update: None,
@@ -500,6 +493,7 @@ impl App {
             implant_sets: Vec::new(),
             target_name: String::new(),
             target_resists: Default::default(),
+            target_numbers: Default::default(),
             esi_pending: false,
             pyfa_pending: false,
             duplicates: Vec::new(),
@@ -596,9 +590,14 @@ impl App {
                 self.left = LeftTab::Character;
             } else if arg == "--graph" {
                 self.center = CenterTab::Graph;
-            } else if arg == "--graph=cap" {
+            } else if let Some(name) = arg.to_str().and_then(|a| a.strip_prefix("--graph=")) {
                 self.center = CenterTab::Graph;
-                self.graph_kind = GraphKind::CapOverTime;
+                let kind = rufa_sim::graph::Kind::ALL
+                    .into_iter()
+                    .find(|k| k.label().eq_ignore_ascii_case(name));
+                if let Some(kind) = kind {
+                    let _ = self.graph_update(GraphMsg::Kind(kind));
+                }
             } else {
                 self.open_path(PathBuf::from(arg));
             }
@@ -611,6 +610,9 @@ impl App {
             Ok(game) => AttrIds::resolve(&game.sde).ok(),
             Err(_) => None,
         };
+        self.fx = self.game.as_ref().ok().map(|g| graphs::effect_ids(g));
+        self.info = self.game.as_ref().ok().map(|g| g.info());
+        self.graph.req.options = graphs::options_from(&self.settings.graph_options);
         let tag = rufa_data::update::installed_tag(data_dir).unwrap_or_default();
         self.status = match (&self.game, &self.ids) {
             (Ok(game), Some(_)) => format!("SDE build {} {tag} loaded", game.build_number()),
@@ -924,6 +926,12 @@ impl App {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.update_inner(message);
+        self.graph_refresh();
+        task
+    }
+
+    fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::WindowResized(size) => {
                 self.window_width = size.width;
@@ -1748,25 +1756,13 @@ impl App {
                 }
             }
             Message::MonitorSize(_, None) => {}
-            Message::GraphKind(kind) => self.graph_kind = kind,
-            Message::GraphSignature(s) => self.graph_signature = s,
-            Message::TargetProfile(i) => {
-                if i < self.targets.len() {
-                    self.target = i;
-                    let p = &self.targets[i];
-                    self.graph_signature = if p.signature > 0.0 {
-                        format!("{}", p.signature)
-                    } else {
-                        String::new()
-                    };
-                    self.graph_velocity = if p.velocity > 0.0 {
-                        format!("{}", p.velocity)
-                    } else {
-                        String::new()
-                    };
+            Message::Graph(m) => return self.graph_update(m),
+            Message::TargetName(s) => self.target_name = s,
+            Message::TargetNumber(i, s) => {
+                if i < 4 {
+                    self.target_numbers[i] = s;
                 }
             }
-            Message::TargetName(s) => self.target_name = s,
             Message::TargetResist(i, s) => {
                 if i < 4 {
                     self.target_resists[i] = s;
@@ -1783,21 +1779,29 @@ impl App {
                     let v: f64 = s.trim().trim_end_matches('%').parse().unwrap_or(0.0);
                     resists[i] = if v > 1.0 { v / 100.0 } else { v }.clamp(0.0, 1.0);
                 }
+                let number = |i: usize| -> f64 {
+                    self.target_numbers[i]
+                        .trim()
+                        .parse()
+                        .ok()
+                        .filter(|v: &f64| v.is_finite() && *v >= 0.0)
+                        .unwrap_or(0.0)
+                };
                 let profile = TargetProfile {
                     name: name.clone(),
                     resists,
-                    signature: self.graph_signature.trim().parse().unwrap_or(0.0),
-                    velocity: self.graph_velocity.trim().parse().unwrap_or(0.0),
+                    signature: number(0),
+                    velocity: number(1),
+                    radius: number(2),
+                    hp: number(3),
                 };
                 match self.targets.iter().position(|p| p.name == name) {
                     Some(i) => self.targets[i] = profile,
                     None => self.targets.push(profile),
                 }
-                self.target = self
-                    .targets
-                    .iter()
-                    .position(|p| p.name == name)
-                    .unwrap_or(0);
+                if let Some(i) = self.targets.iter().position(|p| p.name == name) {
+                    self.graph.targets_on.insert(i);
+                }
                 let _ = rufa_store::targets::save(&self.config_dir, &self.targets);
             }
             Message::DeleteTargetProfile(i) => {
@@ -1805,9 +1809,14 @@ impl App {
                 if i < self.targets.len() && !builtin.iter().any(|b| b.name == self.targets[i].name)
                 {
                     self.targets.remove(i);
-                    if self.target >= self.targets.len() {
-                        self.target = 0;
-                    }
+                    let kept: Vec<usize> = self
+                        .graph
+                        .targets_on
+                        .iter()
+                        .filter(|t| **t != i)
+                        .map(|t| if *t > i { *t - 1 } else { *t })
+                        .collect();
+                    self.graph.targets_on = kept.into_iter().collect();
                     let _ = rufa_store::targets::save(&self.config_dir, &self.targets);
                 }
             }
@@ -2040,7 +2049,6 @@ impl App {
                 }
             }
             Message::Tick => self.spin = (self.spin + 0.06) % (2.0 * std::f32::consts::PI),
-            Message::GraphVelocity(s) => self.graph_velocity = s,
             Message::Downloaded(result) => {
                 self.downloading = false;
                 if let Err(e) = &result {
@@ -2301,30 +2309,6 @@ impl App {
         targets
     }
 
-    pub fn graph_target(&self) -> rufa_sim::graph::Target {
-        let signature = self
-            .graph_signature
-            .trim()
-            .parse()
-            .ok()
-            .filter(|v: &f64| *v > 0.0);
-        let velocity = self
-            .graph_velocity
-            .trim()
-            .parse()
-            .ok()
-            .filter(|v: &f64| *v >= 0.0);
-        rufa_sim::graph::Target {
-            signature: signature.unwrap_or(f64::INFINITY),
-            velocity: velocity.unwrap_or(0.0),
-            resists: self
-                .targets
-                .get(self.target)
-                .map(|p| p.resists)
-                .unwrap_or([0.0; 4]),
-        }
-    }
-
     pub fn describe_violation(&self, v: &rufa_sim::Violation) -> String {
         use rufa_sim::Target;
         let target = match v.target {
@@ -2412,6 +2396,8 @@ impl App {
             "c" => Message::CopyEft,
             "v" => Message::PasteEft,
             "w" => Message::CloseTab(self.active),
+            "g" if modifiers.contains(Modifiers::SHIFT) => Message::Graph(GraphMsg::NextKind),
+            "g" => Message::CenterTab(CenterTab::Graph),
             _ => return Task::none(),
         };
         self.update(message)
@@ -2787,10 +2773,17 @@ mod tests {
         let _ = app.update(Message::SelectItem(Some(0)));
         let _ = app.view();
         let _ = app.update(Message::CenterTab(CenterTab::Graph));
-        let _ = app.update(Message::GraphSignature("35".to_string()));
         let _ = app.view();
-        let _ = app.update(Message::GraphKind(GraphKind::CapOverTime));
+        assert!(app.graph.plot.is_some(), "the graph tab computes a plot");
+        let _ = app.update(Message::Graph(GraphMsg::Kind(rufa_sim::graph::Kind::Cap)));
         let _ = app.view();
+        let _ = app.update(Message::Graph(GraphMsg::Kind(
+            rufa_sim::graph::Kind::Application,
+        )));
+        let _ = app.view();
+        let _ = app.update(Message::Graph(GraphMsg::Pin(Some(1.0))));
+        let _ = app.view();
+        assert!(app.graph.pinned.is_some());
         let _ = app.update(Message::CenterTab(CenterTab::Fit));
         let uniform = app.docs[0].doc.stats.defense.ehp;
         let em_at = app.damages.iter().position(|p| p.name == "EM").unwrap();
@@ -3358,17 +3351,11 @@ Warp Scrambler II
             .iter()
             .position(|p| p.name == "Battleship")
             .unwrap();
-        let _ = app.update(Message::TargetProfile(i));
-        let target = app.graph_target();
-        assert_eq!(target.resists, [0.3; 4]);
-        let applied = rufa_sim::graph::dps_at(
-            &app.ids.unwrap(),
-            &app.docs[0].doc.fit,
-            &app.docs[0].doc.calc,
-            0.0,
-            &target,
+        let applied = app.applied_dps(&app.docs[0], &app.targets[i]);
+        assert!(
+            (applied - full * 0.7 * 1.01505).abs() < 1e-3,
+            "{applied} vs {full}"
         );
-        assert!((applied - full * 0.7).abs() < 1e-6, "{applied} vs {full}");
         let _ = app.view();
         let _ = std::fs::remove_dir_all(&app.config_dir);
     }
@@ -3421,11 +3408,12 @@ Warp Scrambler II
         let _ = app.update(Message::TargetName("Kiter".to_string()));
         let _ = app.update(Message::TargetResist(0, "50%".to_string()));
         let _ = app.update(Message::TargetResist(1, "0.25".to_string()));
-        let _ = app.update(Message::GraphSignature("40".to_string()));
-        let _ = app.update(Message::GraphVelocity("2000".to_string()));
+        let _ = app.update(Message::TargetNumber(0, "40".to_string()));
+        let _ = app.update(Message::TargetNumber(1, "2000".to_string()));
         let _ = app.update(Message::SaveTargetProfile);
         assert_eq!(app.targets.len(), before + 1);
-        let saved = &app.targets[app.target];
+        let saved = app.targets.iter().find(|p| p.name == "Kiter").unwrap();
+        assert!(app.graph.targets_on.contains(&(app.targets.len() - 1)));
         assert_eq!(saved.name, "Kiter");
         assert_eq!(saved.resists, [0.5, 0.25, 0.0, 0.0]);
         assert_eq!(saved.signature, 40.0);

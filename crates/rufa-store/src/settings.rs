@@ -16,6 +16,8 @@ pub struct Settings {
     /// client, so the size can be known while the position is not.
     pub window_size: Option<(f32, f32)>,
     pub window_at: Option<(f32, f32)>,
+    /// Graph toggles as `key=value` words; the app reads and writes them.
+    pub graph_options: String,
 }
 
 impl Default for Settings {
@@ -31,6 +33,7 @@ impl Default for Settings {
             skipped_version: String::new(),
             window_size: None,
             window_at: None,
+            graph_options: String::new(),
         }
     }
 }
@@ -59,6 +62,7 @@ impl Settings {
                     s.window_size = parse_pair(value).filter(|(w, h)| *w >= 100.0 && *h >= 100.0)
                 }
                 "window_at" => s.window_at = parse_pair(value),
+                "graph_options" => s.graph_options = value.to_string(),
                 _ => {}
             }
         }
@@ -72,7 +76,7 @@ impl Settings {
             None => String::new(),
         };
         let text = format!(
-            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\nskipped_version = {}\nwindow_size = {}\nwindow_at = {}\n",
+            "skill_level = {}\nfactor_reload = {}\ncharacter = {}\nbrowser_ratio = {:.3}\nfit_ratio = {:.3}\nesi_client_id = {}\nui_scale = {:.3}\nskipped_version = {}\nwindow_size = {}\nwindow_at = {}\ngraph_options = {}\n",
             self.skill_level,
             self.factor_reload,
             self.character,
@@ -82,7 +86,8 @@ impl Settings {
             self.ui_scale,
             self.skipped_version,
             pair(self.window_size),
-            pair(self.window_at)
+            pair(self.window_at),
+            self.graph_options
         );
         std::fs::write(dir.join(FILE), text)
     }
@@ -120,6 +125,7 @@ mod tests {
             skipped_version: "v0.4.0".to_string(),
             window_size: Some((1280.0, 720.0)),
             window_at: Some((40.0, -12.0)),
+            graph_options: "resists=1 projected=0".to_string(),
         };
         written.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), written);
