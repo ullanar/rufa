@@ -489,3 +489,93 @@ pub fn add_checked(
         }
     }
 }
+
+const EFFECT_LAUNCHER_FITTED: i32 = 40;
+const EFFECT_TURRET_FITTED: i32 = 42;
+
+fn fitted_as(info: &impl Info, type_id: i32, effect: i32) -> bool {
+    info.get_dogma_effects(type_id)
+        .into_iter()
+        .flatten()
+        .any(|e| e.effect_id() == effect)
+}
+
+fn rack_of_kind(kind: crate::SlotKind) -> Option<Rack> {
+    Some(match kind {
+        crate::SlotKind::High => Rack::High,
+        crate::SlotKind::Medium => Rack::Medium,
+        crate::SlotKind::Low => Rack::Low,
+        crate::SlotKind::Rig => Rack::Rig,
+        crate::SlotKind::Subsystem => Rack::Subsystem,
+        crate::SlotKind::Service => Rack::Service,
+        _ => return None,
+    })
+}
+
+/// Takes out every item the hull cannot carry and hands them back, last
+/// fitted first. The fit that remains passes every structural rule.
+pub fn drop_unfit(info: &impl Info, fit: &mut Fit) -> Vec<crate::FitItem> {
+    let options = crate::Options {
+        sources: false,
+        validate: true,
+    };
+    let mut removed = Vec::new();
+    for _ in 0..4 {
+        let violations = esf_dogma_engine::calculate(info, fit, &options)
+            .violations
+            .unwrap_or_default();
+        let mut doomed: Vec<usize> = Vec::new();
+        for v in &violations {
+            if !structural(&v.rule) {
+                continue;
+            }
+            match (v.target, v.rule) {
+                (crate::Target::Item { index } | crate::Target::Charge { index }, _) => {
+                    doomed.push(index)
+                }
+                (
+                    crate::Target::Ship,
+                    crate::Rule::Slots {
+                        slot,
+                        used,
+                        available,
+                    },
+                ) => {
+                    let over = used.saturating_sub(available) as usize;
+                    let members: Vec<usize> = fit
+                        .items
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, it)| match rack_of_kind(slot) {
+                            Some(rack) => Rack::of_slot(it.slot).is_some_and(|(r, _)| r == rack),
+                            None => {
+                                Rack::of_slot(it.slot).is_some()
+                                    && match slot {
+                                        crate::SlotKind::Turret => {
+                                            fitted_as(info, it.type_id, EFFECT_TURRET_FITTED)
+                                        }
+                                        crate::SlotKind::Launcher => {
+                                            fitted_as(info, it.type_id, EFFECT_LAUNCHER_FITTED)
+                                        }
+                                        _ => false,
+                                    }
+                            }
+                        })
+                        .map(|(i, _)| i)
+                        .collect();
+                    doomed.extend(members.iter().rev().take(over));
+                }
+                _ => {}
+            }
+        }
+        doomed.sort_unstable();
+        doomed.dedup();
+        if doomed.is_empty() {
+            break;
+        }
+        for index in doomed.into_iter().rev() {
+            removed.push(fit.items.remove(index));
+        }
+    }
+    removed
+}

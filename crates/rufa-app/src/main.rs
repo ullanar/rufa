@@ -747,11 +747,28 @@ impl App {
             return;
         };
         rufa_sim::place::wake_the_head(&mut fit);
+        let left_out = edit::drop_unfit(&game.info(), &mut fit);
         let doc = Document::new(&game.info(), &ids, fit);
-        self.status = format!(
-            "Calculated in {:.2} ms",
-            doc.last_calc.as_secs_f64() * 1000.0
-        );
+        self.status = if left_out.is_empty() {
+            format!(
+                "Calculated in {:.2} ms",
+                doc.last_calc.as_secs_f64() * 1000.0
+            )
+        } else {
+            let names: Vec<&str> = left_out
+                .iter()
+                .map(|it| self.type_name(it.type_id))
+                .collect();
+            format!(
+                "Left out {} the hull cannot take: {}",
+                if names.len() == 1 {
+                    "a module"
+                } else {
+                    "modules"
+                },
+                names.join(", ")
+            )
+        };
         // A newly opened fit goes first: the one just asked for is the one to
         // look at, and the tab strip keeps it in sight.
         self.docs.insert(
@@ -1730,7 +1747,9 @@ impl App {
                         Ok(mut fit) => {
                             fit.character.skills = self.skills(game);
                             self.open_fit(fit, None);
-                            self.status = "Fit imported from clipboard".to_string();
+                            if !self.status.starts_with("Left out") {
+                                self.status = "Fit imported from clipboard".to_string();
+                            }
                         }
                         Err(e) => self.status = format!("Import failed: {e}"),
                     }
@@ -3385,6 +3404,28 @@ Warp Scrambler II
         let _ = app.update(Message::DeleteImplantSet(0));
         assert!(app.implant_sets.is_empty());
         let _ = std::fs::remove_dir_all(&app.config_dir);
+    }
+
+    #[test]
+    fn an_imported_fit_sheds_what_the_hull_cannot_take() {
+        let Some(mut app) = app() else { return };
+        let eft = "[Rifter, crowded]\n200mm AutoCannon II\n200mm AutoCannon II\n200mm AutoCannon II\n200mm AutoCannon II\n200mm AutoCannon II\n\n1MN Afterburner II\n1MN Afterburner II\n1MN Afterburner II\n1MN Afterburner II\n";
+        let _ = app.update(Message::ImportText(Some(eft.to_string())));
+        assert_eq!(app.docs.len(), 1, "{}", app.status);
+        let fit = &app.docs[0].doc.fit;
+        let ac = type_id(&app, "200mm AutoCannon II");
+        let ab = type_id(&app, "1MN Afterburner II");
+        assert_eq!(fit.items.iter().filter(|it| it.type_id == ac).count(), 3);
+        assert_eq!(fit.items.iter().filter(|it| it.type_id == ab).count(), 3);
+        assert!(app.status.starts_with("Left out modules"), "{}", app.status);
+        assert!(app.docs[0].doc.calc.violations.as_ref().is_none_or(|v| {
+            v.iter().all(|v| {
+                matches!(
+                    v.rule,
+                    rufa_sim::Rule::Resource { .. } | rufa_sim::Rule::Skill { .. }
+                )
+            })
+        }));
     }
 
     #[test]
