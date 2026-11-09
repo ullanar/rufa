@@ -510,9 +510,13 @@ fn toolbar(app: &App) -> El<'_> {
 }
 
 fn status_bar(app: &App) -> El<'_> {
-    let mut bar = row![ui::small(&app.status).width(Length::Fill)]
-        .spacing(ui::PAD)
-        .align_y(iced::Alignment::Center);
+    let mut bar = row![
+        container(ui::small(&app.status))
+            .clip(true)
+            .width(Length::Fill)
+    ]
+    .spacing(ui::PAD)
+    .align_y(iced::Alignment::Center);
     if app.prices_pending {
         bar = bar.add(ui::label("prices"));
     }
