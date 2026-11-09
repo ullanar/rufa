@@ -43,6 +43,13 @@ const MIN_BROWSER: f32 = 160.0;
 const MIN_FIT: f32 = 300.0;
 const MIN_STATS: f32 = 200.0;
 
+fn window_icon(png: &[u8]) -> Option<iced::window::Icon> {
+    let image = ::image::load_from_memory_with_format(png, ::image::ImageFormat::Png).ok()?;
+    let rgba = image.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
+}
+
 /// Wayland matches a window to its desktop entry by this name. The field
 /// exists on Linux alone; the other platforms carry different ones.
 #[cfg(target_os = "linux")]
@@ -78,11 +85,7 @@ fn main() -> iced::Result {
         size,
         min_size: Some(iced::Size::new(MIN_WINDOW.0, MIN_WINDOW.1)),
         position,
-        icon: iced::window::icon::from_file_data(
-            include_bytes!("../assets/icons/rufa-256.png"),
-            None,
-        )
-        .ok(),
+        icon: window_icon(include_bytes!("../assets/icons/rufa-256.png")),
         platform_specific: platform_specific(),
         ..Default::default()
     };

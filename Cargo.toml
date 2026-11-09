@@ -19,7 +19,8 @@ winresource = "0.1"
 windows-registry = "0.6"
 mslnk = "0.1"
 ring = "0.17"
-iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "x11", "wayland", "thread-pool", "canvas", "crisp", "web-colors", "svg", "image"] }
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "x11", "wayland", "thread-pool", "canvas", "crisp", "web-colors", "svg", "image-without-codecs"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 rufa-data = { path = "crates/rufa-data" }
 rufa-sim = { path = "crates/rufa-sim" }
