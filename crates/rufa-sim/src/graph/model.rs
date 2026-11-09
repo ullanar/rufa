@@ -954,7 +954,11 @@ impl YAxis {
         let mut out = String::new();
         if effective {
             out.push_str("Effective ");
-            out.push_str(&label.to_lowercase());
+            if label == "DPS" {
+                out.push_str(label);
+            } else {
+                out.push_str(&label.to_lowercase());
+            }
         } else {
             out.push_str(label);
         }
@@ -1092,6 +1096,6 @@ mod tests {
         let mut options = Options::default();
         assert_eq!(y.title(&options), "DPS");
         options.resists = true;
-        assert_eq!(y.title(&options), "Effective dps");
+        assert_eq!(y.title(&options), "Effective DPS");
     }
 }

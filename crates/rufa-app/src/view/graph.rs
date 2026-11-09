@@ -1186,3 +1186,28 @@ impl canvas::Program<Message> for Dial {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_readout_interpolates_lines_and_holds_steps() {
+        let pts = [(0.0, 0.0), (10.0, 100.0), (20.0, 100.0)];
+        assert_eq!(value_at(&pts, false, 5.0), Some(50.0));
+        assert_eq!(value_at(&pts, true, 5.0), Some(0.0));
+        assert_eq!(value_at(&pts, false, 20.0), Some(100.0));
+        assert_eq!(value_at(&pts, false, 25.0), None);
+        assert_eq!(value_at(&[], false, 1.0), None);
+    }
+
+    #[test]
+    fn ticks_round_to_readable_steps() {
+        assert_eq!(tick_step(100.0, 5.0), 20.0);
+        assert_eq!(tick_step(1.0, 4.0), 0.25);
+        assert_eq!(nice_ceiling(412.0), 500.0);
+        assert_eq!(nice_ceiling(1900.0), 2000.0);
+        assert_eq!(tick_label(20.0, 20.0), "20");
+        assert_eq!(tick_label(0.5, 0.25), "0.5");
+    }
+}
