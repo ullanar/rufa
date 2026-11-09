@@ -1,23 +1,10 @@
-# Advisories cargo audit skips. Every entry is a transitive dependency of iced
-# 0.14 that this workspace cannot replace or bump on its own. The fixed crates
-# are already on crates.io; iced master pulls them in, so drop the list when
-# Cargo.toml moves to iced 0.15.
+# Advisories cargo audit skips.
 [advisories]
 ignore = [
-    # paste is unmaintained. Pulled by metal, the macOS backend of wgpu. The
-    # Linux and Windows builds never compile it.
-    "RUSTSEC-2024-0436",
-    # rustybuzz is unmaintained. Pulled by usvg 0.45 behind the iced svg feature.
-    # usvg 0.49 uses harfrust instead.
-    "RUSTSEC-2026-0206",
-    # ttf-parser is unmaintained. Pulled by fontdb through cosmic-text and usvg.
-    # cosmic-text 0.19 and usvg 0.49 use skrifa instead.
+    # ttf-parser is unmaintained. Pulled by sctk-adwaita, the Wayland client side
+    # decorations of winit, through ab_glyph. Nothing else in the tree uses it.
     "RUSTSEC-2026-0192",
-    # lru 0.16 pop is not panic safe. cryoglyph 0.1.0 pins lru 0.16; cryoglyph
-    # master is on lru 0.18.2. The release profile builds with panic = "abort",
-    # so no unwinding reaches the unsound path.
-    "RUSTSEC-2026-0253",
     # pin-utils is unmaintained. Pulled by wasmtimer, a wasm32 only dependency of
-    # iced_futures that still sits in Cargo.lock.
+    # iced_futures that sits in Cargo.lock without ever being compiled here.
     "RUSTSEC-2026-0441",
 ]
